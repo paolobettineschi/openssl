@@ -378,6 +378,13 @@
 # define SSL_CLIENT_USE_SIGALGS(s)        \
     SSL_CLIENT_USE_TLS1_2_CIPHERS(s)
 
+# define SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s) \
+    (s->session) && \
+    ((s->session->tlsext_max_fragment_length >= TLSEXT_max_fragment_length_2_TO_9) && \
+     (s->session->tlsext_max_fragment_length <= TLSEXT_max_fragment_length_2_TO_12))
+# define SSL_GET_MAX_FRAGMENT_LENGTH(s) \
+    (2U << (7 + s->session->tlsext_max_fragment_length))
+
 # define SSL_USE_ETM(s) (s->s3->flags & TLS1_FLAGS_ENCRYPT_THEN_MAC)
 
 /* Mostly for SSLv3 */
@@ -544,6 +551,11 @@ struct ssl_session_st {
      */
     struct ssl_session_st *prev, *next;
     char *tlsext_hostname;
+    /* Maximum Fragment Length as per RFC 4366.
+     * If this value does not contain RFC 4366 allowed values (1-4)
+     * then either the Maximum Fragment Length Negotiation failed
+     * or was not performed at all. */
+    unsigned char tlsext_max_fragment_length;
 # ifndef OPENSSL_NO_EC
     size_t tlsext_ecpointformatlist_length;
     unsigned char *tlsext_ecpointformatlist; /* peer's list */
@@ -768,6 +780,8 @@ struct ssl_ctx_st {
     /* TLS extensions servername callback */
     int (*tlsext_servername_callback) (SSL *, int *, void *);
     void *tlsext_servername_arg;
+    /* RFC 4366 Maximum Fragment Length Negotiation */
+    unsigned char tlsext_max_fragment_length;
     /* RFC 4507 session ticket keys */
     unsigned char tlsext_tick_key_name[TLSEXT_KEYNAME_LENGTH];
     unsigned char tlsext_tick_hmac_key[32];
@@ -1059,6 +1073,17 @@ struct ssl_st {
     /* OCSP response received or to be sent */
     unsigned char *tlsext_ocsp_resp;
     int tlsext_ocsp_resplen;
+
+    /* Maximum Fragment Length as per RFC 4366.
+       If this member contains one of the allowed values (1-4)
+       then we should include Maximum Fragment Length Negotiation
+       extension in Client Hello.
+       Please note that value of this member does not have direct
+       effect. The actual (binding) value is stored in SSL_SESSION,
+       as this extension is optional on server side.
+    */
+    unsigned char tlsext_max_fragment_length;
+
     /* RFC4507 session ticket expected to be received or sent */
     int tlsext_ticket_expected;
 # ifndef OPENSSL_NO_EC
