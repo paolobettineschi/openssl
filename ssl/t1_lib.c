@@ -1059,6 +1059,19 @@ int ssl_add_clienthello_tlsext(SSL *s, WPACKET *pkt, int *al)
     }
 #endif
 
+    /* Add Max Fragment Length extension if user enabled it. */
+    if (s->tlsext_max_fragment_length >= TLSEXT_max_fragment_length_2_TO_9
+        && s->tlsext_max_fragment_length <= TLSEXT_max_fragment_length_2_TO_12) {
+        if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_max_fragment_length)
+                /* Sub-packet for Max Fragment Length extension (1 byte) */
+                || !WPACKET_start_sub_packet_u16(pkt)
+                || !WPACKET_put_bytes_u8(pkt, s->tlsext_max_fragment_length)
+                || !WPACKET_close(pkt)) {
+            SSLerr(SSL_F_SSL_ADD_CLIENTHELLO_TLSEXT, ERR_R_INTERNAL_ERROR);
+            return 0;
+        }
+    }
+
     /* Add RI if renegotiating */
     if (s->renegotiate) {
         if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_renegotiate)
@@ -1583,6 +1596,17 @@ int ssl_add_serverhello_tlsext(SSL *s, WPACKET *pkt, int *al)
             || !WPACKET_set_flags(pkt, WPACKET_FLAGS_ABANDON_ON_ZERO_LENGTH)) {
         SSLerr(SSL_F_SSL_ADD_SERVERHELLO_TLSEXT, ERR_R_INTERNAL_ERROR);
         return 0;
+    }
+
+    if (SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s)) {
+        /* TODO : ssl_add_max_fragment_len() */
+        if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_max_fragment_length)
+                || !WPACKET_start_sub_packet_u16(pkt)
+                || !WPACKET_put_bytes_u8(pkt, s->session->tlsext_max_fragment_length)
+                || !WPACKET_close(pkt)) {
+            SSLerr(SSL_F_SSL_ADD_SERVERHELLO_TLSEXT, ERR_R_INTERNAL_ERROR);
+            return 0;
+        }
     }
 
     if (s->s3->send_connection_binding &&
@@ -2243,6 +2267,26 @@ static int ssl_scan_clienthello_tlsext(SSL *s, CLIENTHELLO_MSG *hello, int *al)
                                     strlen(s->session->tlsext_hostname));
             }
         }
+        else if (currext->type == TLSEXT_TYPE_max_fragment_length) {
+            unsigned int value;
+
+            if (PACKET_remaining(&currext->data) != 1) {
+                *al = SSL_AD_ILLEGAL_PARAMETER;
+                return 0;
+            }
+
+            if (!PACKET_get_1(&currext->data, &value)
+                || value < TLSEXT_max_fragment_length_2_TO_9
+                || value > TLSEXT_max_fragment_length_2_TO_12) {
+                *al = SSL_AD_ILLEGAL_PARAMETER;
+                return 0;
+            }
+
+            /* value contains valid max fragment length.
+             * Store it in session, so it'll become binding for us
+             * and we'll include it in Server Hello. */
+            s->session->tlsext_max_fragment_length = value;
+        }
 #ifndef OPENSSL_NO_SRP
         else if (currext->type == TLSEXT_TYPE_srp) {
             PACKET srp_I;
@@ -2572,6 +2616,27 @@ static int ssl_scan_serverhello_tlsext(SSL *s, PACKET *pkt, int *al)
                 return 0;
             }
             tlsext_servername = 1;
+        }
+        else if (type == TLSEXT_TYPE_max_fragment_length) {
+            unsigned int value;
+
+            if (size != 1
+                || !PACKET_get_1(&spkt, &value)
+                || value < TLSEXT_max_fragment_length_2_TO_9
+                || value > TLSEXT_max_fragment_length_2_TO_12) {
+                *al = SSL_AD_ILLEGAL_PARAMETER;
+                return 0;
+            }
+
+            if (value == s->tlsext_max_fragment_length) {
+                /* Maximum Fragment Length Negotiation succeeded.
+                 * The negotiated Maximum Fragment Length is binding now. */
+                s->session->tlsext_max_fragment_length = value;
+            }
+            else {
+                *al = SSL_AD_ILLEGAL_PARAMETER;
+                return 0;
+            }
         }
 #ifndef OPENSSL_NO_EC
         else if (type == TLSEXT_TYPE_ec_point_formats) {
