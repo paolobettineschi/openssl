@@ -247,6 +247,32 @@ int CRYPTO_new_ex_data(int class_index, void *obj, CRYPTO_EX_DATA *ad)
 }
 
 /*
+ * Call CRYPTO_EX_free #free_func method on each CRYPTO_EX_DATA item
+ * When called from CRYPTO_dup_ex_data, the #obj parameter is NULL, 
+ * as it is locally unknown.
+ */
+static ossl_inline 
+void do_free_all_ex_data(void *parent, CRYPTO_EX_DATA *ad,
+                         EX_CALLBACK **storage, int mx, char do_free)
+{
+    int i;
+
+    for (i = 0; i < mx; i++) {
+        if (storage[i] && storage[i]->free_func) {
+            void *ptr = CRYPTO_get_ex_data(ad, i);
+            storage[i]->free_func(parent, ptr, ad, i,
+                                  storage[i]->argl, storage[i]->argp);
+        }
+    }
+
+    if (do_free)
+        OPENSSL_free(storage);
+
+    sk_void_free(ad->sk);
+    ad->sk = NULL;
+}
+
+/*
  * Duplicate a CRYPTO_EX_DATA variable - including calling dup() callbacks
  * for each index in the class used by this variable
  */
@@ -290,7 +316,12 @@ int CRYPTO_dup_ex_data(int class_index, CRYPTO_EX_DATA *to,
         if (storage[i] && storage[i]->dup_func)
             storage[i]->dup_func(to, from, &ptr, i,
                                  storage[i]->argl, storage[i]->argp);
-        CRYPTO_set_ex_data(to, i, ptr);
+        if (!CRYPTO_set_ex_data(to, i, ptr)) {
+            /* On failure: free the #i item(s) already stored in #to  */
+            /* Call without ex_data parent object of #to */
+            do_free_all_ex_data(NULL, to, storage, i, storage != stack);
+            return 0;
+        }
     }
     if (storage != stack)
         OPENSSL_free(storage);
@@ -302,11 +333,10 @@ int CRYPTO_dup_ex_data(int class_index, CRYPTO_EX_DATA *to,
  * Cleanup a CRYPTO_EX_DATA variable - including calling free() callbacks for
  * each index in the class used by this variable
  */
-void CRYPTO_free_ex_data(int class_index, void *obj, CRYPTO_EX_DATA *ad)
+void CRYPTO_free_ex_data(int class_index, void *parent, CRYPTO_EX_DATA *ad)
 {
     int mx, i;
     EX_CALLBACKS *ip;
-    void *ptr;
     EX_CALLBACK *stack[10];
     EX_CALLBACK **storage = NULL;
 
@@ -329,18 +359,8 @@ void CRYPTO_free_ex_data(int class_index, void *obj, CRYPTO_EX_DATA *ad)
         CRYPTOerr(CRYPTO_F_CRYPTO_FREE_EX_DATA, ERR_R_MALLOC_FAILURE);
         return;
     }
-    for (i = 0; i < mx; i++) {
-        if (storage[i] && storage[i]->free_func) {
-            ptr = CRYPTO_get_ex_data(ad, i);
-            storage[i]->free_func(obj, ptr, ad, i,
-                                  storage[i]->argl, storage[i]->argp);
-        }
-    }
 
-    if (storage != stack)
-        OPENSSL_free(storage);
-    sk_void_free(ad->sk);
-    ad->sk = NULL;
+    do_free_all_ex_data(parent, ad, storage, mx, storage != stack);
 }
 
 /*

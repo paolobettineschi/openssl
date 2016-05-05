@@ -30,7 +30,7 @@ CRYPTO_get_ex_data, CRYPTO_free_ex_data, CRYPTO_new_ex_data
 
  void *CRYPTO_get_ex_data(CRYPTO_EX_DATA *r, int idx);
 
- void CRYPTO_free_ex_data(int class_index, void *obj, CRYPTO_EX_DATA *r);
+ void CRYPTO_free_ex_data(int class_index, void *parent, CRYPTO_EX_DATA *r);
 
  int CRYPTO_free_ex_index(int class_index, int idx);
 
@@ -96,8 +96,8 @@ to avoid likely double-free crashes.
 
 The function B<CRYPTO_free_ex_data> is used to free all exdata attached
 to a structure. The appropriate type-specific routine must be used.
-The B<class_index> identifies the structure type, the B<obj> is
-be the pointer to the actual structure, and B<r> is a pointer to the
+The B<class_index> identifies the structure type, the B<parent> is
+be the pointer to the actual structure, and B<r> is a pointer to this
 structure's exdata field.
 
 =head2 Callback Functions
