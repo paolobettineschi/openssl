@@ -9,7 +9,6 @@
 
 #include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
-#include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>

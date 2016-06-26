@@ -13,7 +13,6 @@
 # include <openssl/e_os2.h>
 # include <openssl/bio.h>
 # include <openssl/stack.h>
-# include <openssl/evp.h>
 # include <openssl/x509.h>
 # include <openssl/pem2.h>
 

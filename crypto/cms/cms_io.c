@@ -12,6 +12,7 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/cms.h>
+#include <openssl/asn1.h>
 #include "cms_lcl.h"
 
 int CMS_stream(unsigned char ***boundary, CMS_ContentInfo *cms)

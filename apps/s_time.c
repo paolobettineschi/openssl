@@ -21,7 +21,6 @@
 #include "apps.h"
 #include <openssl/x509.h>
 #include <openssl/ssl.h>
-#include <openssl/pem.h>
 #include "s_apps.h"
 #include <openssl/err.h>
 #if !defined(OPENSSL_SYS_MSDOS)

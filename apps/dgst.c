@@ -16,7 +16,6 @@
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/x509.h>
-#include <openssl/pem.h>
 #include <openssl/hmac.h>
 
 #undef BUFSIZE

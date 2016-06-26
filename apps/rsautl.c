@@ -15,7 +15,6 @@ NON_EMPTY_TRANSLATION_UNIT
 # include "apps.h"
 # include <string.h>
 # include <openssl/err.h>
-# include <openssl/pem.h>
 # include <openssl/rsa.h>
 
 # define RSA_SIGN        1

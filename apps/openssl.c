@@ -15,7 +15,6 @@
 #include <openssl/lhash.h>
 #include <openssl/conf.h>
 #include <openssl/x509.h>
-#include <openssl/pem.h>
 #include <openssl/ssl.h>
 #ifndef OPENSSL_NO_ENGINE
 # include <openssl/engine.h>
