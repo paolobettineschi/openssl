@@ -100,6 +100,10 @@ typedef struct ca_args {
     const char *startdate, *enddate;
     long days;
     unsigned long chtype;
+    const char *extensions;   /* ext_sect */
+    CONF *conf;
+    unsigned long certopt, nameopt;
+    int default_op, ext_copy;
     int multirdn, email_dn;
 
     int verbose;
@@ -112,28 +116,20 @@ static char *lookup_conf(const CONF *conf, const char *group, const char *tag);
 
 static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
-                   CA_DB *db, int batch,
-                   const char *ext_sect, CONF *conf,
-                   unsigned long certopt, unsigned long nameopt,
-                   int default_op, int ext_copy, int selfsign);
+                   CA_DB *db, int batch, 
+                   int selfsign);
 static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                         const CA_ARGS* args,
                         CA_DB *db,
-                        int batch, const char *ext_sect,
-                        CONF *conf, unsigned long certopt,
-                        unsigned long nameopt, int default_op, int ext_copy);
+                        int batch);
 static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
                          X509 *x509, const CA_ARGS* args,
-                         CA_DB *db,
-                         const char *ext_sect, CONF *conf,
-                         unsigned long certopt,
-                         unsigned long nameopt, int default_op, int ext_copy);
+                         CA_DB *db);
 static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
                    CA_DB *db,
-                   int batch, X509_REQ *req, const char *ext_sect,
-                   CONF *conf, unsigned long certopt, unsigned long nameopt,
-                   int default_op, int ext_copy, int selfsign);
+                   X509_REQ *req, int batch, 
+                   int selfsign);
 static int get_certificate_status(const char *ser_status, CA_DB *db);
 static int do_updatedb(CA_DB *db);
 static int check_time_format(const char *str);
@@ -241,7 +237,7 @@ int ca_main(int argc, char **argv)
     char *md = NULL, *policy = NULL, *key = NULL;
     const char *certfile = NULL, *crl_ext = NULL, *crlnumberfile = NULL;
     const char *infile = NULL, *spkac_file = NULL, *ss_cert_file = NULL;
-    const char *extensions = NULL, *extfile = NULL, *passinarg = NULL;
+    const char *extfile = NULL, *passinarg = NULL;
     const char *outdir = NULL, *outfile = NULL, *keyfile = NULL;
     const char *prog, *rev_arg = NULL, *ser_status = NULL;
     const char *dbfile = NULL, *f, *randfile = NULL, *serialfile = NULL;
@@ -249,12 +245,11 @@ int ca_main(int argc, char **argv)
     char *const *pp;
     const char *p;
     int create_ser = 0, free_key = 0, total = 0, total_done = 0;
-    int batch = 0, default_op = 1, doupdatedb = 0, ext_copy = EXT_COPY_NONE;
+    int batch = 0, doupdatedb = 0;
     int keyformat = FORMAT_PEM, notext = 0, output_der = 0;
     int ret = 1, req = 0, gencrl = 0, dorevoke = 0;
     int i, j, selfsign = 0;
     long crldays = 0, crlhours = 0, crlsec = 0;
-    unsigned long nameopt = 0, certopt = 0;
     X509 *x509 = NULL, *x509p = NULL, *x = NULL;
     REVINFO_TYPE rev_type = REV_NONE;
     X509_REVOKED *r = NULL;
@@ -263,6 +258,8 @@ int ca_main(int argc, char **argv)
 
     memset(&args, 0, sizeof(args));
     args.chtype = MBSTRING_ASC;
+    args.default_op = 1;
+    args.ext_copy = EXT_COPY_NONE;
 
     prog = opt_init(argc, argv, ca_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -396,7 +393,7 @@ opthelp:
             dorevoke = 2;
             break;
         case OPT_EXTENSIONS:
-            extensions = opt_arg();
+            args.extensions = opt_arg();
             break;
         case OPT_EXTFILE:
             extfile = opt_arg();
@@ -430,6 +427,7 @@ end_of_options:
 
     if ((conf = app_load_config(configfile)) == NULL)
         goto end;
+    args.conf = conf;
     if (configfile != default_config_file && !app_load_modules(conf))
         goto end;
 
@@ -567,31 +565,31 @@ end_of_options:
     f = NCONF_get_string(conf, section, ENV_NAMEOPT);
 
     if (f) {
-        if (!set_name_ex(&nameopt, f)) {
+        if (!set_name_ex(&args.nameopt, f)) {
             BIO_printf(bio_err, "Invalid name options: \"%s\"\n", f);
             goto end;
         }
-        default_op = 0;
+        args.default_op = 0;
     } else {
-        nameopt = XN_FLAG_ONELINE;
+        args.nameopt = XN_FLAG_ONELINE;
         ERR_clear_error();
     }
 
     f = NCONF_get_string(conf, section, ENV_CERTOPT);
 
     if (f) {
-        if (!set_cert_ex(&certopt, f)) {
+        if (!set_cert_ex(&args.certopt, f)) {
             BIO_printf(bio_err, "Invalid certificate options: \"%s\"\n", f);
             goto end;
         }
-        default_op = 0;
+        args.default_op = 0;
     } else
         ERR_clear_error();
 
     f = NCONF_get_string(conf, section, ENV_EXTCOPY);
 
     if (f) {
-        if (!set_ext_copy(&ext_copy, f)) {
+        if (!set_ext_copy(&args.ext_copy, f)) {
             BIO_printf(bio_err, "Invalid extension copy option: \"%s\"\n", f);
             goto end;
         }
@@ -724,10 +722,10 @@ end_of_options:
                        extfile);
 
         /* We can have sections in the ext file */
-        if (extensions == NULL) {
-            extensions = NCONF_get_string(extconf, "default", "extensions");
-            if (extensions == NULL)
-                extensions = "default";
+        if (args.extensions == NULL) {
+            args.extensions = NCONF_get_string(extconf, "default", "extensions");
+            if (args.extensions == NULL)
+                args.extensions = "default";
         }
     }
 
@@ -783,20 +781,20 @@ end_of_options:
              * no '-extfile' option, so we look for extensions in the main
              * configuration file
              */
-            if (!extensions) {
-                extensions = NCONF_get_string(conf, section, ENV_EXTENSIONS);
-                if (!extensions)
+            if (!args.extensions) {
+                args.extensions = NCONF_get_string(conf, section, ENV_EXTENSIONS);
+                if (!args.extensions)
                     ERR_clear_error();
             }
-            if (extensions) {
+            if (args.extensions) {
                 /* Check syntax of file */
                 X509V3_CTX ctx;
                 X509V3_set_ctx_test(&ctx);
                 X509V3_set_nconf(&ctx, conf);
-                if (!X509V3_EXT_add_nconf(conf, &ctx, extensions, NULL)) {
+                if (!X509V3_EXT_add_nconf(conf, &ctx, args.extensions, NULL)) {
                     BIO_printf(bio_err,
                                "Error Loading extension section %s\n",
-                               extensions);
+                               args.extensions);
                     ret = 1;
                     goto end;
                 }
@@ -822,7 +820,7 @@ end_of_options:
             if (args.enddate == NULL)
                 ERR_clear_error();
         }
-        if (args.enddate && !ASN1_TIME_set_string(NULL, args.enddate)) {
+        if (args.enddate != NULL && !ASN1_TIME_set_string(NULL, args.enddate)) {
             BIO_printf(bio_err,
                        "end date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
             goto end;
@@ -864,10 +862,7 @@ end_of_options:
         }
         if (spkac_file != NULL) {
             total++;
-            j = certify_spkac(&x, spkac_file, pkey, x509, &args, db,
-                              extensions,
-                              conf, certopt, nameopt, default_op,
-                              ext_copy);
+            j = certify_spkac(&x, spkac_file, pkey, x509, &args, db);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -888,9 +883,7 @@ end_of_options:
         if (ss_cert_file != NULL) {
             total++;
             j = certify_cert(&x, ss_cert_file, pkey, x509, &args, db,
-                             batch, extensions,
-                             conf, certopt, nameopt, default_op,
-                             ext_copy);
+                             batch);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -907,8 +900,7 @@ end_of_options:
         if (infile != NULL) {
             total++;
             j = certify(&x, infile, pkey, x509p, &args, db,
-                        batch, extensions, conf,
-                        certopt, nameopt, default_op, ext_copy, selfsign);
+                        batch, selfsign);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -925,8 +917,7 @@ end_of_options:
         for (i = 0; i < argc; i++) {
             total++;
             j = certify(&x, argv[i], pkey, x509p, &args, db,
-                        batch, extensions, conf,
-                        certopt, nameopt, default_op, ext_copy, selfsign);
+                        batch, selfsign);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -1249,9 +1240,8 @@ static char *lookup_conf(const CONF *conf, const char *section, const char *tag)
 static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
                    CA_DB *db,
-                   int batch, const char *ext_sect, CONF *lconf,
-                   unsigned long certopt, unsigned long nameopt,
-                   int default_op, int ext_copy, int selfsign)
+                   int batch,
+                   int selfsign)
 {
     X509_REQ *req = NULL;
     BIO *in = NULL;
@@ -1300,10 +1290,9 @@ static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
     } else
         BIO_printf(bio_err, "Signature ok\n");
 
-    ok = do_body(xret, pkey, x509, args, db,
+    ok = do_body(xret, pkey, x509, args, db, req,
                  batch,
-                 req, ext_sect, lconf, certopt, nameopt, default_op,
-                 ext_copy, selfsign);
+                 selfsign);
 
  end:
     X509_REQ_free(req);
@@ -1314,9 +1303,7 @@ static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
 static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                         const CA_ARGS* args,
                         CA_DB *db,
-                        int batch, const char *ext_sect,
-                        CONF *lconf, unsigned long certopt,
-                        unsigned long nameopt, int default_op, int ext_copy)
+                        int batch)
 {
     X509 *req = NULL;
     X509_REQ *rreq = NULL;
@@ -1350,10 +1337,9 @@ static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x
     if ((rreq = X509_to_X509_REQ(req, NULL, NULL)) == NULL)
         goto end;
 
-    ok = do_body(xret, pkey, x509, args, db,
+    ok = do_body(xret, pkey, x509, args, db, rreq,
                  batch,
-                 rreq, ext_sect, lconf, certopt, nameopt, default_op,
-                 ext_copy, 0);
+                 /*selfsign:*/ 0);
 
  end:
     X509_REQ_free(rreq);
@@ -1363,10 +1349,9 @@ static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x
 
 static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
-                   CA_DB *db,
-                   int batch, X509_REQ *req, const char *ext_sect,
-                   CONF *lconf, unsigned long certopt, unsigned long nameopt,
-                   int default_op, int ext_copy, int selfsign)
+                   CA_DB *db, X509_REQ *req,
+                   int batch, 
+                   int selfsign)
 {
     X509_NAME *name = NULL, *CAname = NULL, *subject = NULL, *dn_subject =
         NULL;
@@ -1399,7 +1384,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         X509_NAME_free(n);
     }
 
-    if (default_op)
+    if (args->default_op)
         BIO_printf(bio_err,
                    "The Subject's Distinguished Name is as follows\n");
 
@@ -1451,7 +1436,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
             }
         }
 
-        if (default_op)
+        if (args->default_op)
             old_entry_print(obj, str);
     }
 
@@ -1711,7 +1696,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         goto end;
 
     /* Lets add the extensions, if there are any */
-    if (ext_sect) {
+    if (args->extensions) {
         X509V3_CTX ctx;
         X509_set_version(ret, 2);
 
@@ -1732,24 +1717,24 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
             /* X509V3_set_ctx_test(&ctx); */
 
             /* Adds exts contained in the configuration file */
-            if (!X509V3_EXT_add_nconf(args->extconf, &ctx, ext_sect, ret)) {
+            if (!X509V3_EXT_add_nconf(args->extconf, &ctx, args->extensions, ret)) {
                 BIO_printf(bio_err,
                            "ERROR: adding extensions in section %s\n",
-                           ext_sect);
+                           args->extensions);
                 ERR_print_errors(bio_err);
                 goto end;
             }
             if (args->verbose)
                 BIO_printf(bio_err,
                            "Successfully added extensions from file.\n");
-        } else if (ext_sect) {
+        } else if (args->extensions) {
             /* We found extensions to be set from config file */
-            X509V3_set_nconf(&ctx, lconf);
+            X509V3_set_nconf(&ctx, args->conf);
 
-            if (!X509V3_EXT_add_nconf(lconf, &ctx, ext_sect, ret)) {
+            if (!X509V3_EXT_add_nconf(args->conf, &ctx, args->extensions, ret)) {
                 BIO_printf(bio_err,
                            "ERROR: adding extensions in section %s\n",
-                           ext_sect);
+                           args->extensions);
                 ERR_print_errors(bio_err);
                 goto end;
             }
@@ -1762,7 +1747,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
 
     /* Copy extensions from request (if any) */
 
-    if (!copy_extensions(ret, req, ext_copy)) {
+    if (!copy_extensions(ret, req, args->ext_copy)) {
         BIO_printf(bio_err, "ERROR: adding extensions from request\n");
         ERR_print_errors(bio_err);
         goto end;
@@ -1774,13 +1759,14 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
             goto end;
     }
 
-    if (!default_op) {
+    if (!args->default_op) {
+        unsigned long certopt = args->certopt;
         BIO_printf(bio_err, "Certificate Details:\n");
         /*
          * Never print signature details because signature not present
          */
         certopt |= X509_FLAG_NO_SIGDUMP | X509_FLAG_NO_SIGNAME;
-        X509_print_ex(bio_err, ret, nameopt, certopt);
+        X509_print_ex(bio_err, ret, args->nameopt, certopt);
     }
 
     BIO_printf(bio_err, "Certificate is to be certified until ");
@@ -1876,10 +1862,7 @@ static void write_new_certificate(BIO *bp, X509 *x, int output_der,
 
 static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
                          X509 *x509, const CA_ARGS* args,
-                         CA_DB *db,
-                         const char *ext_sect,
-                         CONF *lconf, unsigned long certopt,
-                         unsigned long nameopt, int default_op, int ext_copy)
+                         CA_DB *db)
 {
     STACK_OF(CONF_VALUE) *sk = NULL;
     LHASH_OF(CONF_VALUE) *parms = NULL;
@@ -1994,10 +1977,10 @@ static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
 
     X509_REQ_set_pubkey(req, pktmp);
     EVP_PKEY_free(pktmp);
-    ok = do_body(xret, pkey, x509, args, db, 
+    ok = do_body(xret, pkey, x509, args, db, req, 
                  /*batch:*/ 1,
-                 req, ext_sect, lconf, certopt, nameopt, default_op,
-                 ext_copy, 0);
+                 /*selfsign:*/ 0);
+
  end:
     X509_REQ_free(req);
     CONF_free(parms);
