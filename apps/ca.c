@@ -106,7 +106,7 @@ typedef struct ca_args {
     int default_op, ext_copy;
     int multirdn, email_dn;
 
-    int verbose;
+    int batch, verbose;
 
     CONF *extconf;
     int preserve, msie_hack;
@@ -115,20 +115,14 @@ typedef struct ca_args {
 static char *lookup_conf(const CONF *conf, const char *group, const char *tag);
 
 static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
-                   const CA_ARGS* args,
-                   CA_DB *db, int batch, 
-                   int selfsign);
+                   const CA_ARGS* args, CA_DB *db, int selfsign);
 static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
-                        const CA_ARGS* args,
-                        CA_DB *db,
-                        int batch);
+                        const CA_ARGS* args, CA_DB *db);
 static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
-                         X509 *x509, const CA_ARGS* args,
-                         CA_DB *db);
+                         X509 *x509, const CA_ARGS* args, CA_DB *db);
+
 static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
-                   const CA_ARGS* args,
-                   CA_DB *db,
-                   X509_REQ *req, int batch, 
+                   const CA_ARGS* args, CA_DB *db, X509_REQ *req,
                    int selfsign);
 static int get_certificate_status(const char *ser_status, CA_DB *db);
 static int do_updatedb(CA_DB *db);
@@ -245,7 +239,7 @@ int ca_main(int argc, char **argv)
     char *const *pp;
     const char *p;
     int create_ser = 0, free_key = 0, total = 0, total_done = 0;
-    int batch = 0, doupdatedb = 0;
+    int doupdatedb = 0;
     int keyformat = FORMAT_PEM, notext = 0, output_der = 0;
     int ret = 1, req = 0, gencrl = 0, dorevoke = 0;
     int i, j, selfsign = 0;
@@ -350,7 +344,7 @@ opthelp:
             notext = 1;
             break;
         case OPT_BATCH:
-            batch = 1;
+            args.batch = 1;
             break;
         case OPT_PRESERVEDN:
             args.preserve = 1;
@@ -861,6 +855,9 @@ end_of_options:
             goto end;
         }
         if (spkac_file != NULL) {
+            int l_batch = args.batch;
+
+            args.batch = 1; /* forced for spkac */
             total++;
             j = certify_spkac(&x, spkac_file, pkey, x509, &args, db);
             if (j < 0)
@@ -876,14 +873,14 @@ end_of_options:
                 }
                 if (outfile) {
                     output_der = 1;
-                    batch = 1;
+                    l_batch =  1;
                 }
             }
+            args.batch = l_batch;       /* restore value */
         }
         if (ss_cert_file != NULL) {
             total++;
-            j = certify_cert(&x, ss_cert_file, pkey, x509, &args, db,
-                             batch);
+            j = certify_cert(&x, ss_cert_file, pkey, x509, &args, db);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -899,8 +896,7 @@ end_of_options:
         }
         if (infile != NULL) {
             total++;
-            j = certify(&x, infile, pkey, x509p, &args, db,
-                        batch, selfsign);
+            j = certify(&x, infile, pkey, x509p, &args, db, selfsign);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -916,8 +912,7 @@ end_of_options:
         }
         for (i = 0; i < argc; i++) {
             total++;
-            j = certify(&x, argv[i], pkey, x509p, &args, db,
-                        batch, selfsign);
+            j = certify(&x, argv[i], pkey, x509p, &args, db, selfsign);
             if (j < 0)
                 goto end;
             if (j > 0) {
@@ -937,7 +932,7 @@ end_of_options:
          */
 
         if (sk_X509_num(cert_sk) > 0) {
-            if (!batch) {
+            if (!args.batch) {
                 BIO_printf(bio_err,
                            "\n%d out of %d certificate requests certified, commit? [y/n]",
                            total_done, total);
@@ -1238,9 +1233,7 @@ static char *lookup_conf(const CONF *conf, const char *section, const char *tag)
 }
 
 static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
-                   const CA_ARGS* args,
-                   CA_DB *db,
-                   int batch,
+                   const CA_ARGS* args, CA_DB *db,
                    int selfsign)
 {
     X509_REQ *req = NULL;
@@ -1290,9 +1283,7 @@ static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
     } else
         BIO_printf(bio_err, "Signature ok\n");
 
-    ok = do_body(xret, pkey, x509, args, db, req,
-                 batch,
-                 selfsign);
+    ok = do_body(xret, pkey, x509, args, db, req, selfsign);
 
  end:
     X509_REQ_free(req);
@@ -1301,9 +1292,7 @@ static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
 }
 
 static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
-                        const CA_ARGS* args,
-                        CA_DB *db,
-                        int batch)
+                        const CA_ARGS* args, CA_DB *db)
 {
     X509 *req = NULL;
     X509_REQ *rreq = NULL;
@@ -1337,9 +1326,7 @@ static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x
     if ((rreq = X509_to_X509_REQ(req, NULL, NULL)) == NULL)
         goto end;
 
-    ok = do_body(xret, pkey, x509, args, db, rreq,
-                 batch,
-                 /*selfsign:*/ 0);
+    ok = do_body(xret, pkey, x509, args, db, rreq, /*selfsign:*/ 0);
 
  end:
     X509_REQ_free(rreq);
@@ -1348,9 +1335,7 @@ static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x
 }
 
 static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
-                   const CA_ARGS* args,
-                   CA_DB *db, X509_REQ *req,
-                   int batch, 
+                   const CA_ARGS* args, CA_DB *db, X509_REQ *req,
                    int selfsign)
 {
     X509_NAME *name = NULL, *CAname = NULL, *subject = NULL, *dn_subject =
@@ -1777,7 +1762,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         BIO_printf(bio_err, " (%ld days)", args->days);
     BIO_printf(bio_err, "\n");
 
-    if (!batch) {
+    if (!args->batch) {
 
         BIO_printf(bio_err, "Sign the certificate? [y/n]:");
         (void)BIO_flush(bio_err);
@@ -1861,8 +1846,7 @@ static void write_new_certificate(BIO *bp, X509 *x, int output_der,
 }
 
 static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
-                         X509 *x509, const CA_ARGS* args,
-                         CA_DB *db)
+                         X509 *x509, const CA_ARGS* args, CA_DB *db)
 {
     STACK_OF(CONF_VALUE) *sk = NULL;
     LHASH_OF(CONF_VALUE) *parms = NULL;
@@ -1977,9 +1961,7 @@ static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
 
     X509_REQ_set_pubkey(req, pktmp);
     EVP_PKEY_free(pktmp);
-    ok = do_body(xret, pkey, x509, args, db, req, 
-                 /*batch:*/ 1,
-                 /*selfsign:*/ 0);
+    ok = do_body(xret, pkey, x509, args, db, req, /*selfsign:*/ 0);
 
  end:
     X509_REQ_free(req);
