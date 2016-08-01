@@ -92,6 +92,15 @@ typedef enum {
 } REVINFO_TYPE;
 
 typedef struct ca_args {
+    const EVP_MD *dgst;
+    STACK_OF(OPENSSL_STRING) *sigopts;
+    STACK_OF(CONF_VALUE) *policy;
+    BIGNUM *serial;
+    const char *subj;
+    const char *startdate, *enddate;
+    long days;
+    unsigned long chtype;
+    int multirdn, email_dn;
 
     int verbose;
 
@@ -103,39 +112,25 @@ static char *lookup_conf(const CONF *conf, const char *group, const char *tag);
 
 static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
-                   const EVP_MD *dgst, STACK_OF(OPENSSL_STRING) *sigopts,
-                   STACK_OF(CONF_VALUE) *policy, CA_DB *db,
-                   BIGNUM *serial, const char *subj, unsigned long chtype,
-                   int multirdn, int email_dn, const char *startdate,
-                   const char *enddate,
-                   long days, int batch, const char *ext_sect, CONF *conf,
+                   CA_DB *db, int batch,
+                   const char *ext_sect, CONF *conf,
                    unsigned long certopt, unsigned long nameopt,
                    int default_op, int ext_copy, int selfsign);
 static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                         const CA_ARGS* args,
-                        const EVP_MD *dgst, STACK_OF(OPENSSL_STRING) *sigopts,
-                        STACK_OF(CONF_VALUE) *policy, CA_DB *db,
-                        BIGNUM *serial, const char *subj, unsigned long chtype,
-                        int multirdn, int email_dn, const char *startdate,
-                        const char *enddate, long days, int batch, const char *ext_sect,
+                        CA_DB *db,
+                        int batch, const char *ext_sect,
                         CONF *conf, unsigned long certopt,
                         unsigned long nameopt, int default_op, int ext_copy);
 static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
                          X509 *x509, const CA_ARGS* args,
-                         const EVP_MD *dgst,
-                         STACK_OF(OPENSSL_STRING) *sigopts,
-                         STACK_OF(CONF_VALUE) *policy, CA_DB *db,
-                         BIGNUM *serial, const char *subj, unsigned long chtype,
-                         int multirdn, int email_dn, const char *startdate,
-                         const char *enddate, long days, const char *ext_sect, CONF *conf,
+                         CA_DB *db,
+                         const char *ext_sect, CONF *conf,
                          unsigned long certopt,
                          unsigned long nameopt, int default_op, int ext_copy);
 static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
-                   const EVP_MD *dgst, STACK_OF(OPENSSL_STRING) *sigopts,
-                   STACK_OF(CONF_VALUE) *policy, CA_DB *db, BIGNUM *serial,
-                   const char *subj, unsigned long chtype, int multirdn,
-                   int email_dn, const char *startdate, const char *enddate, long days,
+                   CA_DB *db,
                    int batch, X509_REQ *req, const char *ext_sect,
                    CONF *conf, unsigned long certopt, unsigned long nameopt,
                    int default_op, int ext_copy, int selfsign);
@@ -233,25 +228,21 @@ int ca_main(int argc, char **argv)
 {
     CONF *conf = NULL;
     ENGINE *e = NULL;
-    BIGNUM *crlnumber = NULL, *serial = NULL;
+    BIGNUM *crlnumber = NULL;
     EVP_PKEY *pkey = NULL;
     BIO *in = NULL, *out = NULL, *Sout = NULL;
     ASN1_INTEGER *tmpser;
     ASN1_TIME *tmptm;
     CA_DB *db = NULL;
-    DB_ATTR db_attr;
-    STACK_OF(CONF_VALUE) *attribs = NULL;
-    STACK_OF(OPENSSL_STRING) *sigopts = NULL;
+    DB_ATTR db_attr = { 0 };
     STACK_OF(X509) *cert_sk = NULL;
     X509_CRL *crl = NULL;
-    const EVP_MD *dgst = NULL;
     char *configfile = default_config_file, *section = NULL;
     char *md = NULL, *policy = NULL, *key = NULL;
     const char *certfile = NULL, *crl_ext = NULL, *crlnumberfile = NULL;
     const char *infile = NULL, *spkac_file = NULL, *ss_cert_file = NULL;
     const char *extensions = NULL, *extfile = NULL, *passinarg = NULL;
     const char *outdir = NULL, *outfile = NULL, *keyfile = NULL;
-    const char *subj = NULL, *startdate = NULL, *enddate = NULL;
     const char *prog, *rev_arg = NULL, *ser_status = NULL;
     const char *dbfile = NULL, *f, *randfile = NULL, *serialfile = NULL;
     char buf[3][BSIZE];
@@ -259,11 +250,11 @@ int ca_main(int argc, char **argv)
     const char *p;
     int create_ser = 0, free_key = 0, total = 0, total_done = 0;
     int batch = 0, default_op = 1, doupdatedb = 0, ext_copy = EXT_COPY_NONE;
-    int keyformat = FORMAT_PEM, multirdn = 0, notext = 0, output_der = 0;
-    int ret = 1, email_dn = 1, req = 0, gencrl = 0, dorevoke = 0;
+    int keyformat = FORMAT_PEM, notext = 0, output_der = 0;
+    int ret = 1, req = 0, gencrl = 0, dorevoke = 0;
     int i, j, selfsign = 0;
-    long crldays = 0, crlhours = 0, crlsec = 0, days = 0;
-    unsigned long chtype = MBSTRING_ASC, nameopt = 0, certopt = 0;
+    long crldays = 0, crlhours = 0, crlsec = 0;
+    unsigned long nameopt = 0, certopt = 0;
     X509 *x509 = NULL, *x509p = NULL, *x = NULL;
     REVINFO_TYPE rev_type = REV_NONE;
     X509_REVOKED *r = NULL;
@@ -271,6 +262,8 @@ int ca_main(int argc, char **argv)
     CA_ARGS args;
 
     memset(&args, 0, sizeof(args));
+    args.chtype = MBSTRING_ASC;
+
     prog = opt_init(argc, argv, ca_options);
     while ((o = opt_next()) != OPT_EOF) {
         switch (o) {
@@ -300,26 +293,26 @@ opthelp:
             section = opt_arg();
             break;
         case OPT_SUBJ:
-            subj = opt_arg();
+            args.subj = opt_arg();
             /* preserve = 1; */
             break;
         case OPT_UTF8:
-            chtype = MBSTRING_UTF8;
+            args.chtype = MBSTRING_UTF8;
             break;
         case OPT_CREATE_SERIAL:
             create_ser = 1;
             break;
         case OPT_MULTIVALUE_RDN:
-            multirdn = 1;
+            args.multirdn = 1;
             break;
         case OPT_STARTDATE:
-            startdate = opt_arg();
+            args.startdate = opt_arg();
             break;
         case OPT_ENDDATE:
-            enddate = opt_arg();
+            args.enddate = opt_arg();
             break;
         case OPT_DAYS:
-            days = atoi(opt_arg());
+            args.days = atoi(opt_arg());
             break;
         case OPT_MD:
             md = opt_arg();
@@ -350,10 +343,10 @@ opthelp:
             outdir = opt_arg();
             break;
         case OPT_SIGOPT:
-            if (sigopts == NULL)
-                sigopts = sk_OPENSSL_STRING_new_null();
-            if (sigopts == NULL
-                || !sk_OPENSSL_STRING_push(sigopts, opt_arg()))
+            if (args.sigopts == NULL)
+                args.sigopts = sk_OPENSSL_STRING_new_null();
+            if (args.sigopts == NULL
+                || !sk_OPENSSL_STRING_push(args.sigopts, opt_arg()))
                 goto end;
             break;
         case OPT_NOTEXT:
@@ -366,7 +359,7 @@ opthelp:
             args.preserve = 1;
             break;
         case OPT_NOEMAILDN:
-            email_dn = 0;
+            args.email_dn = 0;
             break;
         case OPT_GENCRL:
             gencrl = 1;
@@ -484,12 +477,12 @@ end_of_options:
         goto end;
     }
 
-    if (chtype != MBSTRING_UTF8) {
+    if (args.chtype != MBSTRING_UTF8) {
         f = NCONF_get_string(conf, section, UTF8_IN);
         if (!f)
             ERR_clear_error();
         else if (strcmp(f, "yes") == 0)
-            chtype = MBSTRING_UTF8;
+            args.chtype = MBSTRING_UTF8;
     }
 
     db_attr.unique_subject = 1;
@@ -759,21 +752,21 @@ end_of_options:
         md = (char *)OBJ_nid2sn(def_nid);
     }
 
-    if (!opt_md(md, &dgst)) {
+    if (!opt_md(md, &args.dgst)) {
         goto end;
     }
 
     if (req) {
-        if (email_dn == 1) {
+        if (args.email_dn == 1) {
             char *tmp_email_dn = NULL;
 
             tmp_email_dn = NCONF_get_string(conf, section, ENV_DEFAULT_EMAIL_DN);
             if (tmp_email_dn != NULL && strcmp(tmp_email_dn, "no") == 0)
-                email_dn = 0;
+                args.email_dn = 0;
         }
         if (args.verbose)
             BIO_printf(bio_err, "message digest is %s\n",
-                       OBJ_nid2ln(EVP_MD_type(dgst)));
+                       OBJ_nid2ln(EVP_MD_type(args.dgst)));
         if (policy == NULL
             && (policy = lookup_conf(conf, section, ENV_POLICY)) == NULL)
             goto end;
@@ -810,57 +803,57 @@ end_of_options:
             }
         }
 
-        if (startdate == NULL) {
-            startdate = NCONF_get_string(conf, section,
+        if (args.startdate == NULL) {
+            args.startdate = NCONF_get_string(conf, section,
                                          ENV_DEFAULT_STARTDATE);
-            if (startdate == NULL)
+            if (args.startdate == NULL)
                 ERR_clear_error();
         }
-        if (startdate && !ASN1_TIME_set_string(NULL, startdate)) {
+        if (args.startdate && !ASN1_TIME_set_string(NULL, args.startdate)) {
             BIO_printf(bio_err,
                        "start date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
             goto end;
         }
-        if (startdate == NULL)
-            startdate = "today";
+        if (args.startdate == NULL)
+            args.startdate = "today";
 
-        if (enddate == NULL) {
-            enddate = NCONF_get_string(conf, section, ENV_DEFAULT_ENDDATE);
-            if (enddate == NULL)
+        if (args.enddate == NULL) {
+            args.enddate = NCONF_get_string(conf, section, ENV_DEFAULT_ENDDATE);
+            if (args.enddate == NULL)
                 ERR_clear_error();
         }
-        if (enddate && !ASN1_TIME_set_string(NULL, enddate)) {
+        if (args.enddate && !ASN1_TIME_set_string(NULL, args.enddate)) {
             BIO_printf(bio_err,
                        "end date is invalid, it should be YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ\n");
             goto end;
         }
 
-        if (days == 0) {
-            if (!NCONF_get_number(conf, section, ENV_DEFAULT_DAYS, &days))
-                days = 0;
+        if (args.days == 0) {
+            if (!NCONF_get_number(conf, section, ENV_DEFAULT_DAYS, &args.days))
+                args.days = 0;
         }
-        if (!enddate && (days == 0)) {
+        if (args.enddate == NULL && args.days == 0) {
             BIO_printf(bio_err,
                        "cannot lookup how many days to certify for\n");
             goto end;
         }
 
-        if ((serial = load_serial(serialfile, create_ser, NULL)) == NULL) {
+        if ((args.serial = load_serial(serialfile, create_ser, NULL)) == NULL) {
             BIO_printf(bio_err, "error while loading serial number\n");
             goto end;
         }
         if (args.verbose) {
-            if (BN_is_zero(serial))
+            if (BN_is_zero(args.serial))
                 BIO_printf(bio_err, "next serial number is 00\n");
             else {
-                if ((f = BN_bn2hex(serial)) == NULL)
+                if ((f = BN_bn2hex(args.serial)) == NULL)
                     goto end;
                 BIO_printf(bio_err, "next serial number is %s\n", f);
                 OPENSSL_free((char*)f);
             }
         }
 
-        if ((attribs = NCONF_get_section(conf, policy)) == NULL) {
+        if ((args.policy = NCONF_get_section(conf, policy)) == NULL) {
             BIO_printf(bio_err, "unable to find 'section' for %s\n", policy);
             goto end;
         }
@@ -871,9 +864,8 @@ end_of_options:
         }
         if (spkac_file != NULL) {
             total++;
-            j = certify_spkac(&x, spkac_file, pkey, x509, &args, dgst, sigopts,
-                              attribs, db, serial, subj, chtype, multirdn,
-                              email_dn, startdate, enddate, days, extensions,
+            j = certify_spkac(&x, spkac_file, pkey, x509, &args, db,
+                              extensions,
                               conf, certopt, nameopt, default_op,
                               ext_copy);
             if (j < 0)
@@ -881,7 +873,7 @@ end_of_options:
             if (j > 0) {
                 total_done++;
                 BIO_printf(bio_err, "\n");
-                if (!BN_add_word(serial, 1))
+                if (!BN_add_word(args.serial, 1))
                     goto end;
                 if (!sk_X509_push(cert_sk, x)) {
                     BIO_printf(bio_err, "Memory allocation failure\n");
@@ -895,10 +887,8 @@ end_of_options:
         }
         if (ss_cert_file != NULL) {
             total++;
-            j = certify_cert(&x, ss_cert_file, pkey, x509, &args, dgst, sigopts,
-                             attribs,
-                             db, serial, subj, chtype, multirdn, email_dn,
-                             startdate, enddate, days, batch, extensions,
+            j = certify_cert(&x, ss_cert_file, pkey, x509, &args, db,
+                             batch, extensions,
                              conf, certopt, nameopt, default_op,
                              ext_copy);
             if (j < 0)
@@ -906,7 +896,7 @@ end_of_options:
             if (j > 0) {
                 total_done++;
                 BIO_printf(bio_err, "\n");
-                if (!BN_add_word(serial, 1))
+                if (!BN_add_word(args.serial, 1))
                     goto end;
                 if (!sk_X509_push(cert_sk, x)) {
                     BIO_printf(bio_err, "Memory allocation failure\n");
@@ -916,16 +906,15 @@ end_of_options:
         }
         if (infile != NULL) {
             total++;
-            j = certify(&x, infile, pkey, x509p, &args, dgst, sigopts, attribs, db,
-                        serial, subj, chtype, multirdn, email_dn, startdate,
-                        enddate, days, batch, extensions, conf,
+            j = certify(&x, infile, pkey, x509p, &args, db,
+                        batch, extensions, conf,
                         certopt, nameopt, default_op, ext_copy, selfsign);
             if (j < 0)
                 goto end;
             if (j > 0) {
                 total_done++;
                 BIO_printf(bio_err, "\n");
-                if (!BN_add_word(serial, 1))
+                if (!BN_add_word(args.serial, 1))
                     goto end;
                 if (!sk_X509_push(cert_sk, x)) {
                     BIO_printf(bio_err, "Memory allocation failure\n");
@@ -935,16 +924,15 @@ end_of_options:
         }
         for (i = 0; i < argc; i++) {
             total++;
-            j = certify(&x, argv[i], pkey, x509p, &args, dgst, sigopts, attribs, db,
-                        serial, subj, chtype, multirdn, email_dn, startdate,
-                        enddate, days, batch, extensions, conf,
+            j = certify(&x, argv[i], pkey, x509p, &args, db,
+                        batch, extensions, conf,
                         certopt, nameopt, default_op, ext_copy, selfsign);
             if (j < 0)
                 goto end;
             if (j > 0) {
                 total_done++;
                 BIO_printf(bio_err, "\n");
-                if (!BN_add_word(serial, 1))
+                if (!BN_add_word(args.serial, 1))
                     goto end;
                 if (!sk_X509_push(cert_sk, x)) {
                     BIO_printf(bio_err, "Memory allocation failure\n");
@@ -980,7 +968,7 @@ end_of_options:
             BIO_printf(bio_err, "Write out database with %d new entries\n",
                        sk_X509_num(cert_sk));
 
-            if (!save_serial(serialfile, "new", serial, NULL))
+            if (!save_serial(serialfile, "new", args.serial, NULL))
                 goto end;
 
             if (!save_index(dbfile, "new", db))
@@ -1130,11 +1118,11 @@ end_of_options:
                     goto end;
                 if (j == 2)
                     crl_v2 = 1;
-                if (!BN_hex2bn(&serial, pp[DB_serial]))
+                if (!BN_hex2bn(&args.serial, pp[DB_serial]))
                     goto end;
-                tmpser = BN_to_ASN1_INTEGER(serial, NULL);
-                BN_free(serial);
-                serial = NULL;
+                tmpser = BN_to_ASN1_INTEGER(args.serial, NULL);
+                BN_free(args.serial);
+                args.serial = NULL;
                 if (!tmpser)
                     goto end;
                 X509_REVOKED_set_serialNumber(r, tmpser);
@@ -1186,7 +1174,7 @@ end_of_options:
         BN_free(crlnumber);
         crlnumber = NULL;
 
-        if (!do_X509_CRL_sign(crl, pkey, dgst, sigopts))
+        if (!do_X509_CRL_sign(crl, pkey, args.dgst, args.sigopts))
             goto end;
 
         PEM_write_bio_X509_CRL(Sout, crl);
@@ -1224,7 +1212,9 @@ end_of_options:
     }
     /*****************************************************************/
     ret = 0;
+
  end:
+
     BIO_free_all(Sout);
     BIO_free_all(out);
     BIO_free_all(in);
@@ -1235,10 +1225,10 @@ end_of_options:
     app_RAND_write_file(randfile);
     if (free_key)
         OPENSSL_free(key);
-    BN_free(serial);
+    BN_free(args.serial);
     BN_free(crlnumber);
     free_index(db);
-    sk_OPENSSL_STRING_free(sigopts);
+    sk_OPENSSL_STRING_free(args.sigopts);
     EVP_PKEY_free(pkey);
     X509_free(x509);
     X509_CRL_free(crl);
@@ -1258,12 +1248,8 @@ static char *lookup_conf(const CONF *conf, const char *section, const char *tag)
 
 static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
-                   const EVP_MD *dgst, STACK_OF(OPENSSL_STRING) *sigopts,
-                   STACK_OF(CONF_VALUE) *policy, CA_DB *db,
-                   BIGNUM *serial, const char *subj, unsigned long chtype,
-                   int multirdn, int email_dn, const char *startdate,
-                   const char *enddate,
-                   long days, int batch, const char *ext_sect, CONF *lconf,
+                   CA_DB *db,
+                   int batch, const char *ext_sect, CONF *lconf,
                    unsigned long certopt, unsigned long nameopt,
                    int default_op, int ext_copy, int selfsign)
 {
@@ -1314,8 +1300,8 @@ static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
     } else
         BIO_printf(bio_err, "Signature ok\n");
 
-    ok = do_body(xret, pkey, x509, args, dgst, sigopts, policy, db, serial, subj,
-                 chtype, multirdn, email_dn, startdate, enddate, days, batch,
+    ok = do_body(xret, pkey, x509, args, db,
+                 batch,
                  req, ext_sect, lconf, certopt, nameopt, default_op,
                  ext_copy, selfsign);
 
@@ -1327,11 +1313,8 @@ static int certify(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
 
 static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x509,
                         const CA_ARGS* args,
-                        const EVP_MD *dgst, STACK_OF(OPENSSL_STRING) *sigopts,
-                        STACK_OF(CONF_VALUE) *policy, CA_DB *db,
-                        BIGNUM *serial, const char *subj, unsigned long chtype,
-                        int multirdn, int email_dn, const char *startdate,
-                        const char *enddate, long days, int batch, const char *ext_sect,
+                        CA_DB *db,
+                        int batch, const char *ext_sect,
                         CONF *lconf, unsigned long certopt,
                         unsigned long nameopt, int default_op, int ext_copy)
 {
@@ -1367,8 +1350,8 @@ static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x
     if ((rreq = X509_to_X509_REQ(req, NULL, NULL)) == NULL)
         goto end;
 
-    ok = do_body(xret, pkey, x509, args, dgst, sigopts, policy, db, serial, subj,
-                 chtype, multirdn, email_dn, startdate, enddate, days, batch,
+    ok = do_body(xret, pkey, x509, args, db,
+                 batch,
                  rreq, ext_sect, lconf, certopt, nameopt, default_op,
                  ext_copy, 0);
 
@@ -1380,10 +1363,7 @@ static int certify_cert(X509 **xret, const char *infile, EVP_PKEY *pkey, X509 *x
 
 static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
                    const CA_ARGS* args,
-                   const EVP_MD *dgst, STACK_OF(OPENSSL_STRING) *sigopts,
-                   STACK_OF(CONF_VALUE) *policy, CA_DB *db, BIGNUM *serial,
-                   const char *subj, unsigned long chtype, int multirdn,
-                   int email_dn, const char *startdate, const char *enddate, long days,
+                   CA_DB *db,
                    int batch, X509_REQ *req, const char *ext_sect,
                    CONF *lconf, unsigned long certopt, unsigned long nameopt,
                    int default_op, int ext_copy, int selfsign)
@@ -1391,13 +1371,13 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
     X509_NAME *name = NULL, *CAname = NULL, *subject = NULL, *dn_subject =
         NULL;
     const ASN1_TIME *tm;
-    ASN1_STRING *str, *str2;
     ASN1_OBJECT *obj;
     X509 *ret = NULL;
     X509_NAME_ENTRY *ne;
     X509_NAME_ENTRY *tne, *push;
     EVP_PKEY *pktmp;
     int ok = -1, i, j, last, nid;
+    int tdays = args->days;
     const char *p;
     CONF_VALUE *cv;
     OPENSSL_STRING row[DB_NUMBER];
@@ -1408,8 +1388,8 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
     for (i = 0; i < DB_NUMBER; i++)
         row[i] = NULL;
 
-    if (subj) {
-        X509_NAME *n = parse_name(subj, chtype, multirdn);
+    if (args->subj) {
+        X509_NAME *n = parse_name(args->subj, args->chtype, args->multirdn);
 
         if (!n) {
             ERR_print_errors(bio_err);
@@ -1425,6 +1405,8 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
 
     name = X509_REQ_get_subject_name(req);
     for (i = 0; i < X509_NAME_entry_count(name); i++) {
+        ASN1_STRING *str;
+
         ne = X509_NAME_get_entry(name, i);
         str = X509_NAME_ENTRY_get_data(ne);
         obj = X509_NAME_ENTRY_get_object(ne);
@@ -1446,7 +1428,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         }
 
         /* If no EMAIL is wanted in the subject */
-        if ((OBJ_obj2nid(obj) == NID_pkcs9_emailAddress) && (!email_dn))
+        if ((OBJ_obj2nid(obj) == NID_pkcs9_emailAddress) && (!args->email_dn))
             continue;
 
         /* check some things */
@@ -1486,10 +1468,11 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         CAname = X509_NAME_dup(X509_get_subject_name(x509));
     if (CAname == NULL)
         goto end;
-    str = str2 = NULL;
 
-    for (i = 0; i < sk_CONF_VALUE_num(policy); i++) {
-        cv = sk_CONF_VALUE_value(policy, i); /* get the object id */
+    for (i = 0; i < sk_CONF_VALUE_num(args->policy); i++) {
+        ASN1_STRING *str = NULL, *str2 = NULL;
+
+        cv = sk_CONF_VALUE_value(args->policy, i); /* get the object id */
         if ((j = OBJ_txt2nid(cv->name)) == NID_undef) {
             BIO_printf(bio_err,
                        "%s:unknown object type in 'policy' configuration\n",
@@ -1599,7 +1582,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
      * (altName)
      */
 
-    if (email_dn)
+    if (args->email_dn)
         dn_subject = subject;
     else {
         X509_NAME_ENTRY *tmpne;
@@ -1620,10 +1603,10 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         }
     }
 
-    if (BN_is_zero(serial))
+    if (BN_is_zero(args->serial))
         row[DB_serial] = OPENSSL_strdup("00");
     else
-        row[DB_serial] = BN_bn2hex(serial);
+        row[DB_serial] = BN_bn2hex(args->serial);
     if (row[DB_serial] == NULL) {
         BIO_printf(bio_err, "Memory allocation failure\n");
         goto end;
@@ -1701,7 +1684,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         goto end;
 #endif
 
-    if (BN_to_ASN1_INTEGER(serial, X509_get_serialNumber(ret)) == NULL)
+    if (BN_to_ASN1_INTEGER(args->serial, X509_get_serialNumber(ret)) == NULL)
         goto end;
     if (selfsign) {
         if (!X509_set_issuer_name(ret, subject))
@@ -1711,13 +1694,12 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
             goto end;
     }
 
-    if (!set_cert_times(ret, startdate, enddate, days))
+    if (!set_cert_times(ret, args->startdate, args->enddate, args->days))
         goto end;
 
-    if (enddate != NULL) {
-        int tdays;
+    if (args->enddate != NULL) {
         ASN1_TIME_diff(&tdays, NULL, NULL, X509_get0_notAfter(ret));
-        days = tdays;
+        /* args->days = tdays; */
     }
 
     if (!X509_set_subject_name(ret, subject))
@@ -1787,7 +1769,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
     }
 
     /* Set the right value for the noemailDN option */
-    if (email_dn == 0) {
+    if (args->email_dn == 0) {
         if (!X509_set_subject_name(ret, dn_subject))
             goto end;
     }
@@ -1803,8 +1785,10 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
 
     BIO_printf(bio_err, "Certificate is to be certified until ");
     ASN1_TIME_print(bio_err, X509_get0_notAfter(ret));
-    if (days)
-        BIO_printf(bio_err, " (%ld days)", days);
+    if (args->days != tdays)
+        BIO_printf(bio_err, " (%d days)", tdays);
+    else if (args->days)
+        BIO_printf(bio_err, " (%ld days)", args->days);
     BIO_printf(bio_err, "\n");
 
     if (!batch) {
@@ -1830,7 +1814,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         !EVP_PKEY_missing_parameters(pkey))
         EVP_PKEY_copy_parameters(pktmp, pkey);
 
-    if (!do_X509_sign(ret, pkey, dgst, sigopts))
+    if (!do_X509_sign(ret, pkey, args->dgst, args->sigopts))
         goto end;
 
     /* We now just add it to the database as DB_TYPE_VAL('V') */
@@ -1892,12 +1876,8 @@ static void write_new_certificate(BIO *bp, X509 *x, int output_der,
 
 static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
                          X509 *x509, const CA_ARGS* args,
-                         const EVP_MD *dgst,
-                         STACK_OF(OPENSSL_STRING) *sigopts,
-                         STACK_OF(CONF_VALUE) *policy, CA_DB *db,
-                         BIGNUM *serial, const char *subj, unsigned long chtype,
-                         int multirdn, int email_dn, const char *startdate,
-                         const char *enddate, long days, const char *ext_sect,
+                         CA_DB *db,
+                         const char *ext_sect,
                          CONF *lconf, unsigned long certopt,
                          unsigned long nameopt, int default_op, int ext_copy)
 {
@@ -1981,7 +1961,7 @@ static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
             continue;
         }
 
-        if (!X509_NAME_add_entry_by_NID(n, nid, chtype,
+        if (!X509_NAME_add_entry_by_NID(n, nid, args->chtype,
                                         (unsigned char *)buf, -1, -1, 0))
             goto end;
     }
@@ -2014,8 +1994,8 @@ static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
 
     X509_REQ_set_pubkey(req, pktmp);
     EVP_PKEY_free(pktmp);
-    ok = do_body(xret, pkey, x509, args, dgst, sigopts, policy, db, serial, subj,
-                 chtype, multirdn, email_dn, startdate, enddate, days, 1,
+    ok = do_body(xret, pkey, x509, args, db, 
+                 /*batch:*/ 1,
                  req, ext_sect, lconf, certopt, nameopt, default_op,
                  ext_copy, 0);
  end:
