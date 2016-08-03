@@ -90,10 +90,15 @@ typedef unsigned int u_int;
 #include <openssl/ebcdic.h>
 #endif
 
+typedef struct server_cb_ctx_t {
+    int async;
+
+} SERVER_CB_CTX;
+
 static int not_resumable_sess_cb(SSL *s, int is_forward_secure);
-static int sv_body(int s, int stype, unsigned char *context);
-static int www_body(int s, int stype, unsigned char *context);
-static int rev_body(int s, int stype, unsigned char *context);
+static int sv_body(int s, int stype, unsigned char *context, void *cb_arg);
+static int www_body(int s, int stype, unsigned char *context, void *cb_arg);
+static int rev_body(int s, int stype, unsigned char *context, void *cb_arg);
 static void close_accept_socket(void);
 static int init_ssl_connection(SSL *s);
 static void print_stats(BIO *bp, SSL_CTX *ctx);
@@ -131,8 +136,6 @@ static int s_brief = 0;
 
 static char *keymatexportlabel = NULL;
 static int keymatexportlen = 20;
-
-static int async = 0;
 
 static const char *session_id_prefix = NULL;
 
@@ -938,7 +941,10 @@ int s_server_main(int argc, char *argv[])
     int no_resume_ephemeral = 0;
     unsigned int split_send_fragment = 0, max_pipelines = 0;
     const char *s_serverinfo_file = NULL;
+    SERVER_CB_CTX s_ctx;
 
+    memset(&s_ctx, 0, sizeof(s_ctx));
+ 
     /* Init of few remaining global variables */
     local_argc = argc;
     local_argv = argv;
@@ -951,7 +957,6 @@ int s_server_main(int argc, char *argv[])
     s_msg = 0;
     s_quiet = 0;
     s_brief = 0;
-    async = 0;
 
     cctx = SSL_CONF_CTX_new();
     vpm = X509_VERIFY_PARAM_new();
@@ -1411,7 +1416,7 @@ int s_server_main(int argc, char *argv[])
             keymatexportlen = atoi(opt_arg());
             break;
         case OPT_ASYNC:
-            async = 1;
+            s_ctx.async = 1;
             break;
         case OPT_SPLIT_SEND_FRAG:
             split_send_fragment = atoi(opt_arg());
@@ -1656,7 +1661,7 @@ int s_server_main(int argc, char *argv[])
     else
         SSL_CTX_sess_set_cache_size(ctx, 128);
 
-    if (async) {
+    if (s_ctx.async) {
         SSL_CTX_set_mode(ctx, SSL_MODE_ASYNC);
     }
     if (split_send_fragment > 0) {
@@ -1740,7 +1745,7 @@ int s_server_main(int argc, char *argv[])
         else
             SSL_CTX_sess_set_cache_size(ctx2, 128);
 
-        if (async)
+        if (s_ctx.async)
             SSL_CTX_set_mode(ctx2, SSL_MODE_ASYNC);
 
         if (!ctx_set_verify_locations(ctx2, CAfile, CApath, noCAfile,
@@ -1932,7 +1937,7 @@ int s_server_main(int argc, char *argv[])
         unlink(host);
 #endif
     do_server(&accept_socket, host, port, socket_family, socket_type,
-              server_cb, context, naccept);
+              server_cb, &s_ctx, context, naccept);
     print_stats(bio_s_out, ctx);
     ret = 0;
  end:
@@ -2002,7 +2007,7 @@ static void print_stats(BIO *bio, SSL_CTX *ssl_ctx)
                SSL_CTX_sess_get_cache_size(ssl_ctx));
 }
 
-static int sv_body(int s, int stype, unsigned char *context)
+static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
 {
     char *buf = NULL;
     fd_set readfds;
@@ -2011,6 +2016,7 @@ static int sv_body(int s, int stype, unsigned char *context)
     unsigned long l;
     SSL *con = NULL;
     BIO *sbio;
+    const SERVER_CB_CTX* cb_ctx = (const SERVER_CB_CTX*) cb_arg;
     struct timeval timeout;
 #if defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_MSDOS)
     struct timeval tv;
@@ -2127,7 +2133,7 @@ static int sv_body(int s, int stype, unsigned char *context)
 
         read_from_terminal = 0;
         read_from_sslcon = SSL_has_pending(con)
-                           || (async && SSL_waiting_for_async(con));
+                           || (cb_ctx->async && SSL_waiting_for_async(con));
 
         if (!read_from_sslcon) {
             FD_ZERO(&readfds);
@@ -2334,7 +2340,7 @@ static int sv_body(int s, int stype, unsigned char *context)
              * waiting for async then we shouldn't go back into
              * init_ssl_connection
              */
-            if ((!async || !SSL_waiting_for_async(con))
+            if ((!cb_ctx->async || !SSL_waiting_for_async(con))
                     && !SSL_is_init_finished(con)) {
                 i = init_ssl_connection(con);
 
@@ -2618,7 +2624,7 @@ static DH *load_dh_param(const char *dhfile)
 }
 #endif
 
-static int www_body(int s, int stype, unsigned char *context)
+static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
 {
     char *buf = NULL;
     int ret = 1;
@@ -2626,6 +2632,7 @@ static int www_body(int s, int stype, unsigned char *context)
     SSL *con;
     const SSL_CIPHER *c;
     BIO *io, *ssl_bio, *sbio;
+    const SERVER_CB_CTX* cb_ctx = (const SERVER_CB_CTX*) cb_arg;
 #ifdef RENEG
     int total_bytes = 0;
 #endif
@@ -3003,13 +3010,14 @@ static int www_body(int s, int stype, unsigned char *context)
     return (ret);
 }
 
-static int rev_body(int s, int stype, unsigned char *context)
+static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
 {
     char *buf = NULL;
     int i;
     int ret = 1;
     SSL *con;
     BIO *io, *ssl_bio, *sbio;
+    const SERVER_CB_CTX* cb_ctx = (const SERVER_CB_CTX*) cb_arg;
 
     buf = app_malloc(bufsize, "server rev buffer");
     io = BIO_new(BIO_f_buffer());

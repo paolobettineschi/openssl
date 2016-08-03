@@ -117,6 +117,7 @@ int init_client(int *sock, const char *host, const char *port,
  * @type: socket type, must be SOCK_STREAM or SOCK_DGRAM
  * @cb: pointer to a function that receives the accepted socket and
  *  should perform the communication with the connecting client.
+ * @cb_arg : callback argument to share data with a |cb| function.
  * @context: pointer to memory that's passed verbatim to the cb function.
  * @naccept: number of times an incoming connect should be accepted.  If -1,
  *  unlimited number.
@@ -128,7 +129,7 @@ int init_client(int *sock, const char *host, const char *port,
  * 0 on failure, something other on success.
  */
 int do_server(int *accept_sock, const char *host, const char *port,
-              int family, int type, do_server_cb cb,
+              int family, int type, do_server_cb cb, void *cb_arg,
               unsigned char *context, int naccept)
 {
     int asock = 0;
@@ -176,10 +177,10 @@ int do_server(int *accept_sock, const char *host, const char *port,
                 BIO_closesocket(asock);
                 break;
             }
-            i = (*cb)(sock, type, context);
+            i = (*cb)(sock, type, context, cb_arg);
             BIO_closesocket(sock);
         } else {
-            i = (*cb)(asock, type, context);
+            i = (*cb)(asock, type, context, cb_arg);
         }
 
         if (naccept != -1)
