@@ -238,14 +238,14 @@ int ca_main(int argc, char **argv)
     X509_CRL *crl = NULL;
     const EVP_MD *dgst = NULL;
     char *configfile = default_config_file, *section = NULL;
-    char *md = NULL, *policy = NULL, *keyfile = NULL;
-    char *certfile = NULL, *crl_ext = NULL, *crlnumberfile = NULL, *key = NULL;
+    char *md = NULL, *policy = NULL, *key = NULL;
+    const char *certfile = NULL, *crl_ext = NULL, *crlnumberfile = NULL;
     const char *infile = NULL, *spkac_file = NULL, *ss_cert_file = NULL;
     const char *extensions = NULL, *extfile = NULL, *passinarg = NULL;
-    char *outdir = NULL, *outfile = NULL, *rev_arg = NULL, *ser_status = NULL;
-    const char *serialfile = NULL, *subj = NULL;
-    char *prog, *startdate = NULL, *enddate = NULL;
-    char *dbfile = NULL, *f, *randfile = NULL;
+    const char *outdir = NULL, *outfile = NULL, *keyfile = NULL;
+    const char *subj = NULL, *startdate = NULL, *enddate = NULL;
+    const char *prog, *rev_arg = NULL, *ser_status = NULL;
+    const char *dbfile = NULL, *f, *randfile = NULL, *serialfile = NULL;
     char buf[3][BSIZE];
     char *const *pp;
     const char *p;
@@ -843,7 +843,7 @@ end_of_options:
                 if ((f = BN_bn2hex(serial)) == NULL)
                     goto end;
                 BIO_printf(bio_err, "next serial number is %s\n", f);
-                OPENSSL_free(f);
+                OPENSSL_free((char*)f);
             }
         }
 
@@ -2260,7 +2260,6 @@ static const char *crl_reasons[] = {
  * (the current time). 'reason' is the optional CRL reason and 'extra' is any
  * additional argument
  */
-
 static char *make_revocation_str(REVINFO_TYPE rev_type, const char *rev_arg)
 {
     char *str;
