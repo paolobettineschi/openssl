@@ -249,6 +249,7 @@ int ca_main(int argc, char **argv)
     int keyformat = FORMAT_PEM, notext = 0, output_der = 0;
     int ret = 1, req = 0, gencrl = 0, dorevoke = 0;
     int i, j, selfsign = 0;
+    size_t len = 0;
     long crldays = 0, crlhours = 0, crlsec = 0;
     X509 *x509 = NULL, *x509p = NULL, *x = NULL;
     REVINFO_TYPE rev_type = REV_NONE;
@@ -969,36 +970,34 @@ end_of_options:
 
         if (args.verbose)
             BIO_printf(bio_err, "writing new certificates\n");
+
+        strcpy(new_cert, outdir);
+#ifndef OPENSSL_SYS_VMS
+        OPENSSL_strlcat(new_cert, "/", sizeof(new_cert));
+#endif
+        len = strlen(new_cert);
+
         for (i = 0; i < sk_X509_num(cert_sk); i++) {
             BIO *Cout = NULL;
             ASN1_INTEGER *serialNumber = X509_get_serialNumber(x);
-            int k;
-            char *n;
+            const unsigned char *psn = ASN1_STRING_get0_data(serialNumber);
+            int snl = ASN1_STRING_length(serialNumber);
+            char *n = new_cert + len;
 
             x = sk_X509_value(cert_sk, i);
 
-            j = ASN1_STRING_length(serialNumber);
-            p = (const char *)ASN1_STRING_get0_data(serialNumber);
-
-            if (strlen(outdir) >= (size_t)(j ? BSIZE - j * 2 - 6 : BSIZE - 8)) {
+            if (len >= (size_t)(snl ? BSIZE - snl * 2 - 6 : BSIZE - 8)) {
                 BIO_printf(bio_err, "certificate file name too long\n");
                 goto end;
             }
 
-            strcpy(new_cert, outdir);
-#ifndef OPENSSL_SYS_VMS
-            OPENSSL_strlcat(new_cert, "/", sizeof(new_cert));
-#endif
+            if (snl > 0) {
+                static const char HEX_DIGITS[] = "0123456789ABCDEF";
+                char *nmax = new_cert + (sizeof(new_cert) - sizeof(".pem"));
 
-            n = (char *)&(new_cert[strlen(new_cert)]);
-            if (j > 0) {
-                for (k = 0; k < j; k++) {
-                    if (n >= &(new_cert[sizeof(new_cert)]))
-                        break;
-                    BIO_snprintf(n,
-                                 &new_cert[0] + sizeof(new_cert) - n,
-                                 "%02X", (unsigned char)*(p++));
-                    n += 2;
+                for (j = 0; j < snl && n < nmax; j++, psn++) {
+                    *(n++) = HEX_DIGITS[*psn >> 4];
+                    *(n++) = HEX_DIGITS[*psn & 0x0F];
                 }
             } else {
                 *(n++) = '0';
