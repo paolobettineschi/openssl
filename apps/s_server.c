@@ -92,6 +92,14 @@ typedef unsigned int u_int;
 
 typedef struct server_cb_ctx_t {
     int async;
+    int www;
+    int nbio;
+    int nbio_test;
+    int crlf;
+    int tlsextdebug;
+    int msg;
+    int quiet;
+    int ign_eof;
 
 } SERVER_CB_CTX;
 
@@ -118,20 +126,12 @@ static int accept_socket = -1;
 #define TEST_CERT       "server.pem"
 #define TEST_CERT2      "server2.pem"
 
-static int s_nbio = 0;
-static int s_nbio_test = 0;
-static int s_crlf = 0;
 static SSL_CTX *ctx = NULL;
 static SSL_CTX *ctx2 = NULL;
-static int www = 0;
 
 static BIO *bio_s_out = NULL;
 static BIO *bio_s_msg = NULL;
 static int s_debug = 0;
-static int s_tlsextdebug = 0;
-static int s_msg = 0;
-static int s_quiet = 0;
-static int s_ign_eof = 0;
 static int s_brief = 0;
 
 static char *keymatexportlabel = NULL;
@@ -606,6 +606,7 @@ static int next_proto_cb(SSL *s, const unsigned char **data,
 typedef struct tlsextalpnctx_st {
     unsigned char *data;
     size_t len;
+    int quiet;
 } tlsextalpnctx;
 
 static int alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen,
@@ -613,7 +614,7 @@ static int alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen,
 {
     tlsextalpnctx *alpn_ctx = arg;
 
-    if (!s_quiet) {
+    if (!alpn_ctx->quiet) {
         /* We can assume that |in| is syntactically valid. */
         unsigned int i;
         BIO_printf(bio_s_out, "ALPN protocols advertised by the client: ");
@@ -632,7 +633,7 @@ static int alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen,
         return SSL_TLSEXT_ERR_NOACK;
     }
 
-    if (!s_quiet) {
+    if (!alpn_ctx->quiet) {
         BIO_printf(bio_s_out, "ALPN protocols selected: ");
         BIO_write(bio_s_out, *out, *outlen);
         BIO_write(bio_s_out, "\n", 1);
@@ -950,12 +951,8 @@ int s_server_main(int argc, char *argv[])
     local_argv = argv;
 
     ctx = ctx2 = NULL;
-    s_nbio = s_nbio_test = 0;
-    www = 0;
     bio_s_out = NULL;
     s_debug = 0;
-    s_msg = 0;
-    s_quiet = 0;
     s_brief = 0;
 
     cctx = SSL_CONF_CTX_new();
@@ -1060,7 +1057,7 @@ int s_server_main(int argc, char *argv[])
         case OPT_VERIFY:
             s_server_verify = SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE;
             verify_args.depth = atoi(opt_arg());
-            if (!s_quiet)
+            if (!s_ctx.quiet)
                 BIO_printf(bio_err, "verify depth is %d\n", verify_args.depth);
             break;
         case OPT_UPPER_V_VERIFY:
@@ -1068,7 +1065,7 @@ int s_server_main(int argc, char *argv[])
                 SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT |
                 SSL_VERIFY_CLIENT_ONCE;
             verify_args.depth = atoi(opt_arg());
-            if (!s_quiet)
+            if (!s_ctx.quiet)
                 BIO_printf(bio_err,
                            "verify depth is %d, must return a certificate\n",
                            verify_args.depth);
@@ -1196,22 +1193,22 @@ int s_server_main(int argc, char *argv[])
             vfyCAfile = opt_arg();
             break;
         case OPT_NBIO:
-            s_nbio = 1;
+            s_ctx.nbio = 1;
             break;
         case OPT_NBIO_TEST:
-            s_nbio = s_nbio_test = 1;
+            s_ctx.nbio = s_ctx.nbio_test = 1;
             break;
         case OPT_IGN_EOF:
-            s_ign_eof = 1;
+            s_ctx.ign_eof = 1;
             break;
         case OPT_NO_IGN_EOF:
-            s_ign_eof = 0;
+            s_ctx.ign_eof = 0;
             break;
         case OPT_DEBUG:
             s_debug = 1;
             break;
         case OPT_TLSEXTDEBUG:
-            s_tlsextdebug = 1;
+            s_ctx.tlsextdebug = 1;
             break;
         case OPT_STATUS:
 #ifndef OPENSSL_NO_OCSP
@@ -1242,14 +1239,14 @@ int s_server_main(int argc, char *argv[])
 #endif
             break;
         case OPT_MSG:
-            s_msg = 1;
+            s_ctx.msg = 1;
             break;
         case OPT_MSGFILE:
             bio_s_msg = BIO_new_file(opt_arg(), "w");
             break;
         case OPT_TRACE:
 #ifndef OPENSSL_NO_SSL_TRACE
-            s_msg = 2;
+            s_ctx.msg = 2;
 #endif
             break;
         case OPT_SECURITY_DEBUG:
@@ -1262,13 +1259,13 @@ int s_server_main(int argc, char *argv[])
             state = 1;
             break;
         case OPT_CRLF:
-            s_crlf = 1;
+            s_ctx.crlf = 1;
             break;
         case OPT_QUIET:
-            s_quiet = 1;
+            s_ctx.quiet = 1;
             break;
         case OPT_BRIEF:
-            s_quiet = s_brief = verify_args.quiet = 1;
+            s_ctx.quiet = s_brief = verify_args.quiet = 1;
             break;
         case OPT_NO_DHE:
 #ifndef OPENSSL_NO_DH
@@ -1311,13 +1308,13 @@ int s_server_main(int argc, char *argv[])
             rev = 1;
             break;
         case OPT_WWW:
-            www = 1;
+            s_ctx.www = 1;
             break;
         case OPT_UPPER_WWW:
-            www = 2;
+            s_ctx.www = 2;
             break;
         case OPT_HTTP:
-            www = 3;
+            s_ctx.www = 3;
             break;
         case OPT_SSL_CONFIG:
             ssl_config = opt_arg();
@@ -1441,7 +1438,7 @@ int s_server_main(int argc, char *argv[])
     argv = opt_rest();
 
 #ifndef OPENSSL_NO_DTLS
-    if (www && socket_type == SOCK_DGRAM) {
+    if (s_ctx.www && socket_type == SOCK_DGRAM) {
         BIO_printf(bio_err, "Can't use -HTTP, -www or -WWW with DTLS\n");
         goto end;
     }
@@ -1596,9 +1593,9 @@ int s_server_main(int argc, char *argv[])
                    app_RAND_load_files(inrand));
 
     if (bio_s_out == NULL) {
-        if (s_quiet && !s_debug) {
+        if (s_ctx.quiet && !s_debug) {
             bio_s_out = BIO_new(BIO_s_null());
-            if (s_msg && !bio_s_msg)
+            if (s_ctx.msg && !bio_s_msg)
                 bio_s_msg = dup_bio_out(FORMAT_TEXT);
         } else {
             if (bio_s_out == NULL)
@@ -1768,6 +1765,7 @@ int s_server_main(int argc, char *argv[])
         SSL_CTX_set_next_protos_advertised_cb(ctx, next_proto_cb,
                                               &next_proto);
 #endif
+    alpn_ctx.quiet = s_ctx.quiet;
     if (alpn_ctx.data)
         SSL_CTX_set_alpn_select_cb(ctx, alpn_cb, &alpn_ctx);
 
@@ -1927,7 +1925,7 @@ int s_server_main(int argc, char *argv[])
     (void)BIO_flush(bio_s_out);
     if (rev)
         server_cb = rev_body;
-    else if (www)
+    else if (s_ctx.www)
         server_cb = www_body;
     else
         server_cb = sv_body;
@@ -2025,17 +2023,17 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
 #endif
 
     buf = app_malloc(bufsize, "server buffer");
-    if (s_nbio) {
+    if (cb_ctx->nbio) {
         if (!BIO_socket_nbio(s, 1))
             ERR_print_errors(bio_err);
-        else if (!s_quiet)
+        else if (!cb_ctx->quiet)
             BIO_printf(bio_err, "Turned on non blocking io\n");
     }
 
     if (con == NULL) {
         con = SSL_new(ctx);
 
-        if (s_tlsextdebug) {
+        if (cb_ctx->tlsextdebug) {
             SSL_set_tlsext_debug_callback(con, tlsext_cb);
             SSL_set_tlsext_debug_arg(con, bio_s_out);
         }
@@ -2093,7 +2091,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
 #endif
         sbio = BIO_new_socket(s, BIO_NOCLOSE);
 
-    if (s_nbio_test) {
+    if (cb_ctx->nbio_test) {
         BIO *test;
 
         test = BIO_new(BIO_f_nbio_test());
@@ -2108,9 +2106,9 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
         BIO_set_callback(SSL_get_rbio(con), bio_dump_callback);
         BIO_set_callback_arg(SSL_get_rbio(con), (char *)bio_s_out);
     }
-    if (s_msg) {
+    if (cb_ctx->msg) {
 #ifndef OPENSSL_NO_SSL_TRACE
-        if (s_msg == 2)
+        if (cb_ctx->msg == 2)
             SSL_set_msg_callback(con, SSL_trace);
         else
 #endif
@@ -2118,7 +2116,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
         SSL_set_msg_callback_arg(con, bio_s_msg ? bio_s_msg : bio_s_out);
     }
 
-    if (s_tlsextdebug) {
+    if (cb_ctx->tlsextdebug) {
         SSL_set_tlsext_debug_callback(con, tlsext_cb);
         SSL_set_tlsext_debug_arg(con, bio_s_out);
     }
@@ -2185,7 +2183,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
                 read_from_sslcon = 1;
         }
         if (read_from_terminal) {
-            if (s_crlf) {
+            if (cb_ctx->crlf) {
                 int j, lf_num;
 
                 i = raw_read_stdin(buf, bufsize / 2);
@@ -2206,8 +2204,8 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
             } else
                 i = raw_read_stdin(buf, bufsize);
 
-            if (!s_quiet && !s_brief) {
-                if ((i <= 0) || (buf[0] == 'Q')) {
+            if (!cb_ctx->quiet && !s_brief) {
+                if (i <= 0 || buf[0] == 'Q') {
                     BIO_printf(bio_s_out, "DONE\n");
                     (void)BIO_flush(bio_s_out);
                     BIO_closesocket(s);
@@ -2648,10 +2646,10 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
     if ((io == NULL) || (ssl_bio == NULL))
         goto err;
 
-    if (s_nbio) {
+    if (cb_ctx->nbio) {
         if (!BIO_socket_nbio(s, 1))
             ERR_print_errors(bio_err);
-        else if (!s_quiet)
+        else if (!cb_ctx->quiet)
             BIO_printf(bio_err, "Turned on non blocking io\n");
     }
 
@@ -2662,7 +2660,7 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
     if ((con = SSL_new(ctx)) == NULL)
         goto err;
 
-    if (s_tlsextdebug) {
+    if (cb_ctx->tlsextdebug) {
         SSL_set_tlsext_debug_callback(con, tlsext_cb);
         SSL_set_tlsext_debug_arg(con, bio_s_out);
     }
@@ -2673,7 +2671,7 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
         goto err;
 
     sbio = BIO_new_socket(s, BIO_NOCLOSE);
-    if (s_nbio_test) {
+    if (cb_ctx->nbio_test) {
         BIO *test;
 
         test = BIO_new(BIO_f_nbio_test());
@@ -2693,9 +2691,9 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
         BIO_set_callback(SSL_get_rbio(con), bio_dump_callback);
         BIO_set_callback_arg(SSL_get_rbio(con), (char *)bio_s_out);
     }
-    if (s_msg) {
+    if (cb_ctx->msg) {
 #ifndef OPENSSL_NO_SSL_TRACE
-        if (s_msg == 2)
+        if (cb_ctx->msg == 2)
             SSL_set_msg_callback(con, SSL_trace);
         else
 #endif
@@ -2707,7 +2705,7 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
         i = BIO_gets(io, buf, bufsize - 1);
         if (i < 0) {            /* error */
             if (!BIO_should_retry(io) && !SSL_waiting_for_async(con)) {
-                if (!s_quiet)
+                if (!cb_ctx->quiet)
                     ERR_print_errors(bio_err);
                 goto err;
             } else {
@@ -2739,14 +2737,14 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
         }
 
         /* else we have data */
-        if (((www == 1) && (strncmp("GET ", buf, 4) == 0)) ||
-            ((www == 2) && (strncmp("GET /stats ", buf, 11) == 0))) {
+        if ((cb_ctx->www == 1 && strncmp("GET ", buf, 4) == 0) ||
+            (cb_ctx->www == 2 && strncmp("GET /stats ", buf, 11) == 0)) {
             char *p;
             X509 *peer = NULL;
             STACK_OF(SSL_CIPHER) *sk;
             static const char *space = "                          ";
 
-            if (www == 1 && strncmp("GET /reneg", buf, 10) == 0) {
+            if (cb_ctx->www == 1 && strncmp("GET /reneg", buf, 10) == 0) {
                 if (strncmp("GET /renegcert", buf, 14) == 0)
                     SSL_set_verify(con,
                                    SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE,
@@ -2869,8 +2867,8 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
                 BIO_puts(io, "no client certificate available\n");
             BIO_puts(io, "</BODY></HTML>\r\n\r\n");
             break;
-        } else if ((www == 2 || www == 3)
-                   && (strncmp("GET /", buf, 5) == 0)) {
+        } else if ((cb_ctx->www == 2 || cb_ctx->www == 3)
+                   && strncmp("GET /", buf, 5) == 0) {
             BIO *file;
             char *p, *e;
             static const char *text =
@@ -2934,10 +2932,10 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
                 break;
             }
 
-            if (!s_quiet)
+            if (!cb_ctx->quiet)
                 BIO_printf(bio_err, "FILE:%s\n", p);
 
-            if (www == 2) {
+            if (cb_ctx->www == 2) {
                 i = strlen(p);
                 if (((i > 5) && (strcmp(&(p[i - 5]), ".html") == 0)) ||
                     ((i > 4) && (strcmp(&(p[i - 4]), ".php") == 0)) ||
@@ -3032,7 +3030,7 @@ static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
     if ((con = SSL_new(ctx)) == NULL)
         goto err;
 
-    if (s_tlsextdebug) {
+    if (cb_ctx->tlsextdebug) {
         SSL_set_tlsext_debug_callback(con, tlsext_cb);
         SSL_set_tlsext_debug_arg(con, bio_s_out);
     }
@@ -3057,9 +3055,9 @@ static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
         BIO_set_callback(SSL_get_rbio(con), bio_dump_callback);
         BIO_set_callback_arg(SSL_get_rbio(con), (char *)bio_s_out);
     }
-    if (s_msg) {
+    if (cb_ctx->msg) {
 #ifndef OPENSSL_NO_SSL_TRACE
-        if (s_msg == 2)
+        if (cb_ctx->msg == 2)
             SSL_set_msg_callback(con, SSL_trace);
         else
 #endif
@@ -3100,7 +3098,7 @@ static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
         i = BIO_gets(io, buf, bufsize - 1);
         if (i < 0) {            /* error */
             if (!BIO_should_retry(io)) {
-                if (!s_quiet)
+                if (!cb_ctx->quiet)
                     ERR_print_errors(bio_err);
                 goto err;
             } else {
@@ -3136,7 +3134,7 @@ static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
                 p--;
                 i--;
             }
-            if (!s_ign_eof && (i == 5) && (strncmp(buf, "CLOSE", 5) == 0)) {
+            if (!cb_ctx->ign_eof && (i == 5) && (strncmp(buf, "CLOSE", 5) == 0)) {
                 ret = 1;
                 BIO_printf(bio_err, "CONNECTION CLOSED\n");
                 goto end;
