@@ -101,6 +101,13 @@ typedef struct server_cb_ctx_t {
     int quiet;
     int ign_eof;
 
+    int brief;
+#ifndef OPENSSL_NO_DTLS
+    int dtlslisten;
+    int enable_timeouts;
+    long socket_mtu;
+#endif
+
 } SERVER_CB_CTX;
 
 static int not_resumable_sess_cb(SSL *s, int is_forward_secure);
@@ -108,7 +115,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg);
 static int www_body(int s, int stype, unsigned char *context, void *cb_arg);
 static int rev_body(int s, int stype, unsigned char *context, void *cb_arg);
 static void close_accept_socket(void);
-static int init_ssl_connection(SSL *s);
+static int init_ssl_connection(SSL *s, const SERVER_CB_CTX* cb_ctx);
 static void print_stats(BIO *bp, SSL_CTX *ctx);
 static int generate_session_id(const SSL *ssl, unsigned char *id,
                                unsigned int *id_len);
@@ -132,19 +139,11 @@ static SSL_CTX *ctx2 = NULL;
 static BIO *bio_s_out = NULL;
 static BIO *bio_s_msg = NULL;
 static int s_debug = 0;
-static int s_brief = 0;
 
 static char *keymatexportlabel = NULL;
 static int keymatexportlen = 20;
 
 static const char *session_id_prefix = NULL;
-
-#ifndef OPENSSL_NO_DTLS
-static int enable_timeouts = 0;
-static long socket_mtu;
-
-#endif
-static int dtlslisten = 0;
 
 #ifndef OPENSSL_NO_PSK
 static char *psk_identity = "Client_identity";
@@ -953,7 +952,6 @@ int s_server_main(int argc, char *argv[])
     ctx = ctx2 = NULL;
     bio_s_out = NULL;
     s_debug = 0;
-    s_brief = 0;
 
     cctx = SSL_CONF_CTX_new();
     vpm = X509_VERIFY_PARAM_new();
@@ -1265,7 +1263,7 @@ int s_server_main(int argc, char *argv[])
             s_ctx.quiet = 1;
             break;
         case OPT_BRIEF:
-            s_ctx.quiet = s_brief = verify_args.quiet = 1;
+            s_ctx.quiet = s_ctx.brief = verify_args.quiet = 1;
             break;
         case OPT_NO_DHE:
 #ifndef OPENSSL_NO_DH
@@ -1359,17 +1357,17 @@ int s_server_main(int argc, char *argv[])
             break;
         case OPT_TIMEOUT:
 #ifndef OPENSSL_NO_DTLS
-            enable_timeouts = 1;
+            s_ctx.enable_timeouts = 1;
 #endif
             break;
         case OPT_MTU:
 #ifndef OPENSSL_NO_DTLS
-            socket_mtu = atol(opt_arg());
+            s_ctx.socket_mtu = atol(opt_arg());
 #endif
             break;
         case OPT_LISTEN:
 #ifndef OPENSSL_NO_DTLS
-            dtlslisten = 1;
+            s_ctx.dtlslisten = 1;
 #endif
             break;
         case OPT_ID_PREFIX:
@@ -1443,7 +1441,7 @@ int s_server_main(int argc, char *argv[])
         goto end;
     }
 
-    if (dtlslisten && socket_type != SOCK_DGRAM) {
+    if (s_ctx.dtlslisten && socket_type != SOCK_DGRAM) {
         BIO_printf(bio_err, "Can only use -listen with DTLS\n");
         goto end;
     }
@@ -2056,7 +2054,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
 
         sbio = BIO_new_dgram(s, BIO_NOCLOSE);
 
-        if (enable_timeouts) {
+        if (cb_ctx->enable_timeouts) {
             timeout.tv_sec = 0;
             timeout.tv_usec = DGRAM_RCV_TIMEOUT;
             BIO_ctrl(sbio, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, 0, &timeout);
@@ -2066,8 +2064,8 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
             BIO_ctrl(sbio, BIO_CTRL_DGRAM_SET_SEND_TIMEOUT, 0, &timeout);
         }
 
-        if (socket_mtu) {
-            if (socket_mtu < DTLS_get_link_min_mtu(con)) {
+        if (cb_ctx->socket_mtu) {
+            if (cb_ctx->socket_mtu < DTLS_get_link_min_mtu(con)) {
                 BIO_printf(bio_err, "MTU too small. Must be at least %ld\n",
                            DTLS_get_link_min_mtu(con));
                 ret = -1;
@@ -2075,7 +2073,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
                 goto err;
             }
             SSL_set_options(con, SSL_OP_NO_QUERY_MTU);
-            if (!DTLS_set_link_mtu(con, socket_mtu)) {
+            if (!DTLS_set_link_mtu(con, cb_ctx->socket_mtu)) {
                 BIO_printf(bio_err, "Failed to set MTU\n");
                 ret = -1;
                 BIO_free(sbio);
@@ -2204,7 +2202,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
             } else
                 i = raw_read_stdin(buf, bufsize);
 
-            if (!cb_ctx->quiet && !s_brief) {
+            if (!cb_ctx->quiet && !cb_ctx->brief) {
                 if (i <= 0 || buf[0] == 'Q') {
                     BIO_printf(bio_s_out, "DONE\n");
                     (void)BIO_flush(bio_s_out);
@@ -2340,7 +2338,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
              */
             if ((!cb_ctx->async || !SSL_waiting_for_async(con))
                     && !SSL_is_init_finished(con)) {
-                i = init_ssl_connection(con);
+                i = init_ssl_connection(con, cb_ctx);
 
                 if (i < 0) {
                     ret = 0;
@@ -2429,7 +2427,7 @@ static void close_accept_socket(void)
     }
 }
 
-static int init_ssl_connection(SSL *con)
+static int init_ssl_connection(SSL *con, const SERVER_CB_CTX* cb_ctx)
 {
     int i;
     const char *str;
@@ -2444,6 +2442,7 @@ static int init_ssl_connection(SSL *con)
     int retry = 0;
 
 #ifndef OPENSSL_NO_DTLS
+    int dtlslisten = cb_ctx->dtlslisten;
     if (dtlslisten) {
         BIO_ADDR *client = NULL;
 
@@ -2534,7 +2533,7 @@ static int init_ssl_connection(SSL *con)
         return (0);
     }
 
-    if (s_brief)
+    if (cb_ctx->brief)
         print_ssl_summary(con);
 
     PEM_write_bio_SSL_SESSION(bio_s_out, SSL_get_session(con));
