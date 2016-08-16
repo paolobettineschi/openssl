@@ -91,6 +91,9 @@ typedef unsigned int u_int;
 #endif
 
 typedef struct server_cb_ctx_t {
+    SSL_CTX *ctx;
+    BIO *bio_s_msg;
+
     int async;
     int www;
     int nbio;
@@ -136,11 +139,7 @@ static int accept_socket = -1;
 #define TEST_CERT       "server.pem"
 #define TEST_CERT2      "server2.pem"
 
-static SSL_CTX *ctx = NULL;
-static SSL_CTX *ctx2 = NULL;
-
 static BIO *bio_s_out = NULL;
-static BIO *bio_s_msg = NULL;
 static int s_debug = 0;
 
 static const char *session_id_prefix = NULL;
@@ -423,6 +422,7 @@ typedef struct tlsextctx_st {
     char *servername;
     BIO *biodebug;
     int extension_error;
+    SSL_CTX *ctx2;
 } tlsextctx;
 
 static int ssl_servername_cb(SSL *s, int *ad, void *arg)
@@ -439,9 +439,9 @@ static int ssl_servername_cb(SSL *s, int *ad, void *arg)
     if (servername) {
         if (strcasecmp(servername, p->servername))
             return p->extension_error;
-        if (ctx2) {
+        if (p->ctx2) {
             BIO_printf(p->biodebug, "Switching server context.\n");
-            SSL_set_SSL_CTX(s, ctx2);
+            SSL_set_SSL_CTX(s, p->ctx2);
         }
     }
     return SSL_TLSEXT_ERR_OK;
@@ -882,6 +882,7 @@ int s_server_main(int argc, char *argv[])
     STACK_OF(X509_CRL) *crls = NULL;
     X509 *s_cert = NULL, *s_dcert = NULL;
     X509_VERIFY_PARAM *vpm = NULL;
+    SSL_CTX *ctx = NULL, *ctx2 = NULL;
     const char *CApath = NULL, *CAfile = NULL, *chCApath = NULL, *chCAfile = NULL;
     char *dpassarg = NULL, *dpass = NULL, *inrand = NULL;
     char *passarg = NULL, *pass = NULL, *vfyCApath = NULL, *vfyCAfile = NULL;
@@ -908,7 +909,7 @@ int s_server_main(int argc, char *argv[])
     OPTION_CHOICE o;
     EVP_PKEY *s_key2 = NULL;
     X509 *s_cert2 = NULL;
-    tlsextctx tlsextcbp = { NULL, NULL, SSL_TLSEXT_ERR_ALERT_WARNING };
+    tlsextctx tlsextcbp = { NULL, NULL, SSL_TLSEXT_ERR_ALERT_WARNING, NULL };
     const char *ssl_config = NULL;
     int read_buf_len = 0;
 #ifndef OPENSSL_NO_NEXTPROTONEG
@@ -946,7 +947,6 @@ int s_server_main(int argc, char *argv[])
     s_ctx.argv = argv;
  
     /* Init of few remaining global variables */
-    ctx = ctx2 = NULL;
     bio_s_out = NULL;
     s_debug = 0;
 
@@ -1237,7 +1237,7 @@ int s_server_main(int argc, char *argv[])
             s_ctx.msg = 1;
             break;
         case OPT_MSGFILE:
-            bio_s_msg = BIO_new_file(opt_arg(), "w");
+            s_ctx.bio_s_msg = BIO_new_file(opt_arg(), "w");
             break;
         case OPT_TRACE:
 #ifndef OPENSSL_NO_SSL_TRACE
@@ -1590,8 +1590,8 @@ int s_server_main(int argc, char *argv[])
     if (bio_s_out == NULL) {
         if (s_ctx.quiet && !s_debug) {
             bio_s_out = BIO_new(BIO_s_null());
-            if (s_ctx.msg && !bio_s_msg)
-                bio_s_msg = dup_bio_out(FORMAT_TEXT);
+            if (s_ctx.msg && !s_ctx.bio_s_msg)
+                s_ctx.bio_s_msg = dup_bio_out(FORMAT_TEXT);
         } else {
             if (bio_s_out == NULL)
                 bio_s_out = dup_bio_out(FORMAT_TEXT);
@@ -1609,7 +1609,7 @@ int s_server_main(int argc, char *argv[])
         s_key_file2 = NULL;
     }
 
-    ctx = SSL_CTX_new(meth);
+    ctx = s_ctx.ctx = SSL_CTX_new(meth);
     if (ctx == NULL) {
         ERR_print_errors(bio_err);
         goto end;
@@ -1875,6 +1875,7 @@ int s_server_main(int argc, char *argv[])
             goto end;
         }
         tlsextcbp.biodebug = bio_s_out;
+        tlsextcbp.ctx2 = ctx2;
         SSL_CTX_set_tlsext_servername_callback(ctx2, ssl_servername_cb);
         SSL_CTX_set_tlsext_servername_arg(ctx2, &tlsextcbp);
         SSL_CTX_set_tlsext_servername_callback(ctx, ssl_servername_cb);
@@ -1964,8 +1965,8 @@ int s_server_main(int argc, char *argv[])
     release_engine(engine);
     BIO_free(bio_s_out);
     bio_s_out = NULL;
-    BIO_free(bio_s_msg);
-    bio_s_msg = NULL;
+    BIO_free(s_ctx.bio_s_msg);
+    s_ctx.bio_s_msg = NULL;
 #ifdef CHARSET_EBCDIC
     BIO_meth_free(methods_ebcdic);
 #endif
@@ -2026,7 +2027,7 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
     }
 
     if (con == NULL) {
-        con = SSL_new(ctx);
+        con = SSL_new(cb_ctx->ctx);
 
         if (cb_ctx->tlsextdebug) {
             SSL_set_tlsext_debug_callback(con, tlsext_cb);
@@ -2108,7 +2109,8 @@ static int sv_body(int s, int stype, unsigned char *context, void *cb_arg)
         else
 #endif
             SSL_set_msg_callback(con, msg_cb);
-        SSL_set_msg_callback_arg(con, bio_s_msg ? bio_s_msg : bio_s_out);
+        SSL_set_msg_callback_arg(con, 
+                                 cb_ctx->bio_s_msg ? cb_ctx->bio_s_msg : bio_s_out);
     }
 
     if (cb_ctx->tlsextdebug) {
@@ -2653,7 +2655,7 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
     if (!BIO_set_write_buffer_size(io, bufsize))
         goto err;
 
-    if ((con = SSL_new(ctx)) == NULL)
+    if ((con = SSL_new(cb_ctx->ctx)) == NULL)
         goto err;
 
     if (cb_ctx->tlsextdebug) {
@@ -2694,7 +2696,8 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
         else
 #endif
             SSL_set_msg_callback(con, msg_cb);
-        SSL_set_msg_callback_arg(con, bio_s_msg ? bio_s_msg : bio_s_out);
+        SSL_set_msg_callback_arg(con, 
+                                 cb_ctx->bio_s_msg ? cb_ctx->bio_s_msg : bio_s_out);
     }
 
     for (;;) {
@@ -3023,7 +3026,7 @@ static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
     if (!BIO_set_write_buffer_size(io, bufsize))
         goto err;
 
-    if ((con = SSL_new(ctx)) == NULL)
+    if ((con = SSL_new(cb_ctx->ctx)) == NULL)
         goto err;
 
     if (cb_ctx->tlsextdebug) {
@@ -3058,7 +3061,8 @@ static int rev_body(int s, int stype, unsigned char *context, void *cb_arg)
         else
 #endif
             SSL_set_msg_callback(con, msg_cb);
-        SSL_set_msg_callback_arg(con, bio_s_msg ? bio_s_msg : bio_s_out);
+        SSL_set_msg_callback_arg(con, 
+                                 cb_ctx->bio_s_msg ? cb_ctx->bio_s_msg : bio_s_out);
     }
 
     for (;;) {
