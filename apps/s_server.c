@@ -107,7 +107,10 @@ typedef struct server_cb_ctx_t {
     int enable_timeouts;
     long socket_mtu;
 #endif
-
+    char *keymatexportlabel;
+    int keymatexportlen;
+    int argc;
+    char **argv;
 } SERVER_CB_CTX;
 
 static int not_resumable_sess_cb(SSL *s, int is_forward_secure);
@@ -139,9 +142,6 @@ static SSL_CTX *ctx2 = NULL;
 static BIO *bio_s_out = NULL;
 static BIO *bio_s_msg = NULL;
 static int s_debug = 0;
-
-static char *keymatexportlabel = NULL;
-static int keymatexportlen = 20;
 
 static const char *session_id_prefix = NULL;
 
@@ -256,9 +256,6 @@ static int ssl_srp_server_param_cb(SSL *s, int *ad, void *arg)
 }
 
 #endif
-
-static int local_argc = 0;
-static char **local_argv;
 
 #ifdef CHARSET_EBCDIC
 static int ebcdic_new(BIO *bi);
@@ -944,11 +941,11 @@ int s_server_main(int argc, char *argv[])
     SERVER_CB_CTX s_ctx;
 
     memset(&s_ctx, 0, sizeof(s_ctx));
+    s_ctx.keymatexportlen = 20;
+    s_ctx.argc = argc;
+    s_ctx.argv = argv;
  
     /* Init of few remaining global variables */
-    local_argc = argc;
-    local_argv = argv;
-
     ctx = ctx2 = NULL;
     bio_s_out = NULL;
     s_debug = 0;
@@ -1405,10 +1402,10 @@ int s_server_main(int argc, char *argv[])
 #endif
             break;
         case OPT_KEYMATEXPORT:
-            keymatexportlabel = opt_arg();
+            s_ctx.keymatexportlabel = opt_arg();
             break;
         case OPT_KEYMATEXPORTLEN:
-            keymatexportlen = atoi(opt_arg());
+            s_ctx.keymatexportlen = atoi(opt_arg());
             break;
         case OPT_ASYNC:
             s_ctx.async = 1;
@@ -2582,20 +2579,20 @@ static int init_ssl_connection(SSL *con, const SERVER_CB_CTX* cb_ctx)
         BIO_printf(bio_s_out, "Reused session-id\n");
     BIO_printf(bio_s_out, "Secure Renegotiation IS%s supported\n",
                SSL_get_secure_renegotiation_support(con) ? "" : " NOT");
-    if (keymatexportlabel != NULL) {
+    if (cb_ctx->keymatexportlabel != NULL) {
         BIO_printf(bio_s_out, "Keying material exporter:\n");
-        BIO_printf(bio_s_out, "    Label: '%s'\n", keymatexportlabel);
-        BIO_printf(bio_s_out, "    Length: %i bytes\n", keymatexportlen);
-        exportedkeymat = app_malloc(keymatexportlen, "export key");
+        BIO_printf(bio_s_out, "    Label: '%s'\n", cb_ctx->keymatexportlabel);
+        BIO_printf(bio_s_out, "    Length: %i bytes\n", cb_ctx->keymatexportlen);
+        exportedkeymat = app_malloc(cb_ctx->keymatexportlen, "export key");
         if (!SSL_export_keying_material(con, exportedkeymat,
-                                        keymatexportlen,
-                                        keymatexportlabel,
-                                        strlen(keymatexportlabel),
+                                        cb_ctx->keymatexportlen,
+                                        cb_ctx->keymatexportlabel,
+                                        strlen(cb_ctx->keymatexportlabel),
                                         NULL, 0, 0)) {
             BIO_printf(bio_s_out, "    Error\n");
         } else {
             BIO_printf(bio_s_out, "    Keying material: ");
-            for (i = 0; i < keymatexportlen; i++)
+            for (i = 0; i < cb_ctx->keymatexportlen; i++)
                 BIO_printf(bio_s_out, "%02X", exportedkeymat[i]);
             BIO_printf(bio_s_out, "\n");
         }
@@ -2783,9 +2780,9 @@ static int www_body(int s, int stype, unsigned char *context, void *cb_arg)
             BIO_puts(io, "<pre>\n");
             /* BIO_puts(io, OpenSSL_version(OPENSSL_VERSION)); */
             BIO_puts(io, "\n");
-            for (i = 0; i < local_argc; i++) {
+            for (i = 0; i < cb_ctx->argc; i++) {
                 const char *myp;
-                for (myp = local_argv[i]; *myp; myp++)
+                for (myp = cb_ctx->argv[i]; *myp; myp++)
                     switch (*myp) {
                     case '<':
                         BIO_puts(io, "&lt;");
