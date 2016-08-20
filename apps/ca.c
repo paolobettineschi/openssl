@@ -983,19 +983,19 @@ end_of_options:
             const unsigned char *psn = ASN1_STRING_get0_data(serialNumber);
             int snl = ASN1_STRING_length(serialNumber);
             char *n = new_cert + len;
+            int filen_len = 2 * (snl ? snl : 1) + sizeof(".pem");
 
             x = sk_X509_value(cert_sk, i);
 
-            if (len >= (size_t)(snl ? BSIZE - snl * 2 - 6 : BSIZE - 8)) {
+            if (len + filen_len >= BSIZE ) {
                 BIO_printf(bio_err, "certificate file name too long\n");
                 goto end;
             }
 
             if (snl > 0) {
                 static const char HEX_DIGITS[] = "0123456789ABCDEF";
-                char *nmax = new_cert + (sizeof(new_cert) - sizeof(".pem"));
 
-                for (j = 0; j < snl && n < nmax; j++, psn++) {
+                for (j = 0; j < snl; j++, psn++) {
                     *(n++) = HEX_DIGITS[*psn >> 4];
                     *(n++) = HEX_DIGITS[*psn & 0x0F];
                 }
