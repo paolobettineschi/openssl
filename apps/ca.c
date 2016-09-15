@@ -47,8 +47,14 @@
 # define R_OK 4
 #endif
 
-#undef BSIZE
-#define BSIZE 256
+#ifndef PATH_MAX
+# define PATH_MAX 4096
+#endif
+#ifndef NAME_MAX
+# define NAME_MAX 255
+#endif
+
+#define CERT_MAX (PATH_MAX + NAME_MAX)
 
 #define BASE_SECTION            "ca"
 
@@ -240,7 +246,7 @@ int ca_main(int argc, char **argv)
     const char *outdir = NULL, *outfile = NULL, *keyfile = NULL;
     const char *prog, *rev_arg = NULL, *ser_status = NULL;
     const char *dbfile = NULL, *f, *randfile = NULL, *serialfile = NULL;
-    char new_cert[BSIZE] = { 0 };
+    char new_cert[CERT_MAX + 1];
     char tmp[10 + 1] = "\0";
     char *const *pp;
     const char *p;
@@ -261,6 +267,7 @@ int ca_main(int argc, char **argv)
     args.chtype = MBSTRING_ASC;
     args.default_op = 1;
     args.ext_copy = EXT_COPY_NONE;
+    new_cert[CERT_MAX] = '\0';
 
     prog = opt_init(argc, argv, ca_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -987,7 +994,7 @@ end_of_options:
 
             x = sk_X509_value(cert_sk, i);
 
-            if (len + filen_len >= BSIZE ) {
+            if (len + filen_len >= CERT_MAX) {
                 BIO_printf(bio_err, "certificate file name too long\n");
                 goto end;
             }
