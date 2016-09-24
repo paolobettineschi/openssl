@@ -155,7 +155,7 @@ Reference Implementation:
       } else { /* retrieve session */
           key = findkey(name);
 
-          if (!key || key->expire < now() ) {
+          if (key == NULL || key->expire < now() ) {
               return 0;
           }
 

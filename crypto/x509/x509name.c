@@ -87,8 +87,8 @@ X509_NAME_ENTRY *X509_NAME_get_entry(const X509_NAME *name, int loc)
     if (name == NULL || sk_X509_NAME_ENTRY_num(name->entries) <= loc
         || loc < 0)
         return (NULL);
-    else
-        return (sk_X509_NAME_ENTRY_value(name->entries, loc));
+
+    return sk_X509_NAME_ENTRY_value(name->entries, loc);
 }
 
 X509_NAME_ENTRY *X509_NAME_delete_entry(X509_NAME *name, int loc)
@@ -100,6 +100,7 @@ X509_NAME_ENTRY *X509_NAME_delete_entry(X509_NAME *name, int loc)
     if (name == NULL || sk_X509_NAME_ENTRY_num(name->entries) <= loc
         || loc < 0)
         return (NULL);
+
     sk = name->entries;
     ret = sk_X509_NAME_ENTRY_delete(sk, loc);
     n = sk_X509_NAME_ENTRY_num(sk);
