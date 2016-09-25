@@ -16,9 +16,10 @@
 #include <openssl/x509.h>
 #include "internal/x509_int.h"
 
+/* TODO(1.2.0): Constify X509_NAME input arg */
 int X509_NAME_get_text_by_NID(X509_NAME *name, int nid, char *buf, int len)
 {
-    ASN1_OBJECT *obj;
+    const ASN1_OBJECT *obj;
 
     obj = OBJ_nid2obj(nid);
     if (obj == NULL)
@@ -26,6 +27,7 @@ int X509_NAME_get_text_by_NID(X509_NAME *name, int nid, char *buf, int len)
     return (X509_NAME_get_text_by_OBJ(name, obj, buf, len));
 }
 
+/* TODO(1.2.0): Constify X509_NAME input arg */
 int X509_NAME_get_text_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj, char *buf,
                               int len)
 {
@@ -35,7 +37,7 @@ int X509_NAME_get_text_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj, char *buf
     i = X509_NAME_get_index_by_OBJ(name, obj, -1);
     if (i < 0)
         return (-1);
-    data = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(name, i));
+    data = X509_NAME_ENTRY_get0_data(X509_NAME_get0_entry(name, i));
     i = (data->length > (len - 1)) ? (len - 1) : data->length;
     if (buf == NULL)
         return (data->length);
@@ -51,9 +53,10 @@ int X509_NAME_entry_count(const X509_NAME *name)
     return (sk_X509_NAME_ENTRY_num(name->entries));
 }
 
+/* TODO(1.2.0): Constify X509_NAME input arg */
 int X509_NAME_get_index_by_NID(X509_NAME *name, int nid, int lastpos)
 {
-    ASN1_OBJECT *obj;
+    const ASN1_OBJECT *obj;
 
     obj = OBJ_nid2obj(nid);
     if (obj == NULL)
@@ -61,6 +64,7 @@ int X509_NAME_get_index_by_NID(X509_NAME *name, int nid, int lastpos)
     return (X509_NAME_get_index_by_OBJ(name, obj, lastpos));
 }
 
+/* TODO(1.2.0): Constify X509_NAME input arg */
 /* NOTE: you should be passing -1, not 0 as lastpos */
 int X509_NAME_get_index_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj, int lastpos)
 {
@@ -82,13 +86,21 @@ int X509_NAME_get_index_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj, int last
     return (-1);
 }
 
+const X509_NAME_ENTRY *X509_NAME_get0_entry(const X509_NAME *name, int loc)
+{
+    if (name == NULL || sk_X509_NAME_ENTRY_num(name->entries) <= loc || loc < 0)
+        return NULL;
+
+    return sk_X509_NAME_ENTRY_value(name->entries, loc);
+}
+
+/* TODO(1.2.0): un-constify X509_NAME output */
 X509_NAME_ENTRY *X509_NAME_get_entry(const X509_NAME *name, int loc)
 {
-    if (name == NULL || sk_X509_NAME_ENTRY_num(name->entries) <= loc
-        || loc < 0)
-        return (NULL);
-    else
-        return (sk_X509_NAME_ENTRY_value(name->entries, loc));
+    if (name == NULL || sk_X509_NAME_ENTRY_num(name->entries) <= loc || loc < 0)
+        return NULL;
+
+    return sk_X509_NAME_ENTRY_value(name->entries, loc);
 }
 
 X509_NAME_ENTRY *X509_NAME_delete_entry(X509_NAME *name, int loc)
@@ -338,18 +350,26 @@ int X509_NAME_ENTRY_set_data(X509_NAME_ENTRY *ne, int type,
     return (1);
 }
 
-ASN1_OBJECT *X509_NAME_ENTRY_get_object(const X509_NAME_ENTRY *ne)
+const ASN1_OBJECT *X509_NAME_ENTRY_get0_object(const X509_NAME_ENTRY *ne)
 {
-    if (ne == NULL)
-        return (NULL);
-    return (ne->object);
+    return ne->object;
 }
 
+const ASN1_STRING *X509_NAME_ENTRY_get0_data(const X509_NAME_ENTRY *ne)
+{
+    return ne->value;
+}
+
+/* TODO(1.2.0): un-constify X509_NAME_ENTRY input */
+ASN1_OBJECT *X509_NAME_ENTRY_get_object(const X509_NAME_ENTRY *ne)
+{
+    return ne->object;
+}
+
+/* TODO(1.2.0): un-constify X509_NAME_ENTRY input */
 ASN1_STRING *X509_NAME_ENTRY_get_data(const X509_NAME_ENTRY *ne)
 {
-    if (ne == NULL)
-        return (NULL);
-    return (ne->value);
+    return ne->value;
 }
 
 int X509_NAME_ENTRY_set(const X509_NAME_ENTRY *ne)

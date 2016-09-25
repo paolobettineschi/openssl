@@ -779,6 +779,7 @@ int X509_REQ_print_ex(BIO *bp, X509_REQ *x, unsigned long nmflag,
 int X509_REQ_print(BIO *bp, X509_REQ *req);
 
 int X509_NAME_entry_count(const X509_NAME *name);
+/* TODO(1.2.0): Constify X509_NAME input arg */
 int X509_NAME_get_text_by_NID(X509_NAME *name, int nid, char *buf, int len);
 int X509_NAME_get_text_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj,
                               char *buf, int len);
@@ -787,10 +788,13 @@ int X509_NAME_get_text_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj,
  * NOTE: you should be passing -1, not 0 as lastpos. The functions that use
  * lastpos, search after that position on.
  */
+/* TODO(1.2.0): Constify X509_NAME input arg */
 int X509_NAME_get_index_by_NID(X509_NAME *name, int nid, int lastpos);
 int X509_NAME_get_index_by_OBJ(X509_NAME *name, const ASN1_OBJECT *obj,
                                int lastpos);
+/* TODO(1.2.0): should be not-const* TYPE_get0m_entry( not-const* ... */
 X509_NAME_ENTRY *X509_NAME_get_entry(const X509_NAME *name, int loc);
+const X509_NAME_ENTRY *X509_NAME_get0_entry(const X509_NAME *name, int loc);
 X509_NAME_ENTRY *X509_NAME_delete_entry(X509_NAME *name, int loc);
 int X509_NAME_add_entry(X509_NAME *name, const X509_NAME_ENTRY *ne,
                         int loc, int set);
@@ -820,6 +824,8 @@ int X509_NAME_ENTRY_set_data(X509_NAME_ENTRY *ne, int type,
                              const unsigned char *bytes, int len);
 ASN1_OBJECT *X509_NAME_ENTRY_get_object(const X509_NAME_ENTRY *ne);
 ASN1_STRING * X509_NAME_ENTRY_get_data(const X509_NAME_ENTRY *ne);
+const ASN1_OBJECT *X509_NAME_ENTRY_get0_object(const X509_NAME_ENTRY *ne);
+const ASN1_STRING *X509_NAME_ENTRY_get0_data(const X509_NAME_ENTRY *ne);
 int X509_NAME_ENTRY_set(const X509_NAME_ENTRY *ne);
 
 int X509_NAME_get0_der(X509_NAME *nm, const unsigned char **pder,
