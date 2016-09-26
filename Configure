@@ -122,14 +122,14 @@ my $gcc_devteam_warn = "-DDEBUG_UNUSED"
         . " -Wshadow"
         . " -Wformat"
         . " -Wtype-limits"
-        . " -Werror"
+        . " -Wunreachable-code"
+#        . " -Werror"
         ;
 
 # These are used in addition to $gcc_devteam_warn when the compiler is clang.
 # TODO(openssl-team): fix problems and investigate if (at least) the
 # following warnings can also be enabled:
 #       -Wcast-align
-#       -Wunreachable-code
 #       -Wlanguage-extension-token -- no, we use asm()
 #       -Wunused-macros -- no, too tricky for BN and _XOPEN_SOURCE etc
 #       -Wextended-offsetof -- no, needed in CMS ASN1 code
@@ -144,6 +144,7 @@ my $clang_devteam_warn = ""
         . " -Wconditional-uninitialized"
         . " -Wincompatible-pointer-types-discards-qualifiers"
         . " -Wmissing-variable-declarations"
+        . " -Wunreachable-code"
         ;
 
 # This adds backtrace information to the memory leak info.  Is only used
