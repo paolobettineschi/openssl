@@ -194,12 +194,12 @@ static void copy_conditional(BN_ULONG dst[P256_LIMBS],
     dst[1] = (src[1] & mask1) ^ (dst[1] & mask2);
     dst[2] = (src[2] & mask1) ^ (dst[2] & mask2);
     dst[3] = (src[3] & mask1) ^ (dst[3] & mask2);
-    if (P256_LIMBS == 8) {
-        dst[4] = (src[4] & mask1) ^ (dst[4] & mask2);
-        dst[5] = (src[5] & mask1) ^ (dst[5] & mask2);
-        dst[6] = (src[6] & mask1) ^ (dst[6] & mask2);
-        dst[7] = (src[7] & mask1) ^ (dst[7] & mask2);
-    }
+#if P256_LIMBS == 8
+    dst[4] = (src[4] & mask1) ^ (dst[4] & mask2);
+    dst[5] = (src[5] & mask1) ^ (dst[5] & mask2);
+    dst[6] = (src[6] & mask1) ^ (dst[6] & mask2);
+    dst[7] = (src[7] & mask1) ^ (dst[7] & mask2);
+#endif
 }
 
 static BN_ULONG is_zero(BN_ULONG in)
@@ -219,13 +219,12 @@ static BN_ULONG is_equal(const BN_ULONG a[P256_LIMBS],
     res |= a[1] ^ b[1];
     res |= a[2] ^ b[2];
     res |= a[3] ^ b[3];
-    if (P256_LIMBS == 8) {
-        res |= a[4] ^ b[4];
-        res |= a[5] ^ b[5];
-        res |= a[6] ^ b[6];
-        res |= a[7] ^ b[7];
-    }
-
+#if P256_LIMBS == 8
+    res |= a[4] ^ b[4];
+    res |= a[5] ^ b[5];
+    res |= a[6] ^ b[6];
+    res |= a[7] ^ b[7];
+#endif
     return is_zero(res);
 }
 
@@ -239,15 +238,15 @@ static BN_ULONG is_one(const BIGNUM *z)
         res |= a[1] ^ ONE[1];
         res |= a[2] ^ ONE[2];
         res |= a[3] ^ ONE[3];
-        if (P256_LIMBS == 8) {
-            res |= a[4] ^ ONE[4];
-            res |= a[5] ^ ONE[5];
-            res |= a[6] ^ ONE[6];
-            /*
-             * no check for a[7] (being zero) on 32-bit platforms,
-             * because value of "one" takes only 7 limbs.
-             */
-        }
+#if P256_LIMBS == 8
+        res |= a[4] ^ ONE[4];
+        res |= a[5] ^ ONE[5];
+        res |= a[6] ^ ONE[6];
+        /*
+         * no check for a[7] (being zero) on 32-bit platforms,
+         * because value of "one" takes only 7 limbs.
+         */
+#endif
         res = is_zero(res);
     }
 
@@ -349,12 +348,13 @@ static void ecp_nistz256_point_add(P256_POINT *r,
      * Infinity in encoded as (,,0)
      */
     in1infty = (in1_z[0] | in1_z[1] | in1_z[2] | in1_z[3]);
-    if (P256_LIMBS == 8)
-        in1infty |= (in1_z[4] | in1_z[5] | in1_z[6] | in1_z[7]);
-
+#if P256_LIMBS == 8
+    in1infty |= (in1_z[4] | in1_z[5] | in1_z[6] | in1_z[7]);
+#endif
     in2infty = (in2_z[0] | in2_z[1] | in2_z[2] | in2_z[3]);
-    if (P256_LIMBS == 8)
-        in2infty |= (in2_z[4] | in2_z[5] | in2_z[6] | in2_z[7]);
+#if P256_LIMBS == 8
+    in2infty |= (in2_z[4] | in2_z[5] | in2_z[6] | in2_z[7]);
+#endif
 
     in1infty = is_zero(in1infty);
     in2infty = is_zero(in2infty);
@@ -446,8 +446,9 @@ static void ecp_nistz256_point_add_affine(P256_POINT *r,
      * Infinity in encoded as (,,0)
      */
     in1infty = (in1_z[0] | in1_z[1] | in1_z[2] | in1_z[3]);
-    if (P256_LIMBS == 8)
-        in1infty |= (in1_z[4] | in1_z[5] | in1_z[6] | in1_z[7]);
+#if P256_LIMBS == 8
+    in1infty |= (in1_z[4] | in1_z[5] | in1_z[6] | in1_z[7]);
+#endif
 
     /*
      * In affine representation we encode infinity as (0,0), which is
@@ -455,9 +456,10 @@ static void ecp_nistz256_point_add_affine(P256_POINT *r,
      */
     in2infty = (in2_x[0] | in2_x[1] | in2_x[2] | in2_x[3] |
                 in2_y[0] | in2_y[1] | in2_y[2] | in2_y[3]);
-    if (P256_LIMBS == 8)
-        in2infty |= (in2_x[4] | in2_x[5] | in2_x[6] | in2_x[7] |
-                     in2_y[4] | in2_y[5] | in2_y[6] | in2_y[7]);
+#if P256_LIMBS == 8
+    in2infty |= (in2_x[4] | in2_x[5] | in2_x[6] | in2_x[7] |
+                 in2_y[4] | in2_y[5] | in2_y[6] | in2_y[7]);
+#endif
 
     in1infty = is_zero(in1infty);
     in2infty = is_zero(in2infty);
@@ -1302,9 +1304,10 @@ __owur static int ecp_nistz256_points_mul(const EC_GROUP *group,
                  */
                 infty = (p.p.X[0] | p.p.X[1] | p.p.X[2] | p.p.X[3] |
                          p.p.Y[0] | p.p.Y[1] | p.p.Y[2] | p.p.Y[3]);
-                if (P256_LIMBS == 8)
-                    infty |= (p.p.X[4] | p.p.X[5] | p.p.X[6] | p.p.X[7] |
-                              p.p.Y[4] | p.p.Y[5] | p.p.Y[6] | p.p.Y[7]);
+#if P256_LIMBS == 8
+                infty |= (p.p.X[4] | p.p.X[5] | p.p.X[6] | p.p.X[7] |
+                          p.p.Y[4] | p.p.Y[5] | p.p.Y[6] | p.p.Y[7]);
+#endif
 
                 infty = 0 - is_zero(infty);
                 infty = ~infty;
@@ -1313,12 +1316,12 @@ __owur static int ecp_nistz256_points_mul(const EC_GROUP *group,
                 p.p.Z[1] = ONE[1] & infty;
                 p.p.Z[2] = ONE[2] & infty;
                 p.p.Z[3] = ONE[3] & infty;
-                if (P256_LIMBS == 8) {
-                    p.p.Z[4] = ONE[4] & infty;
-                    p.p.Z[5] = ONE[5] & infty;
-                    p.p.Z[6] = ONE[6] & infty;
-                    p.p.Z[7] = ONE[7] & infty;
-                }
+#if P256_LIMBS == 8
+                p.p.Z[4] = ONE[4] & infty;
+                p.p.Z[5] = ONE[5] & infty;
+                p.p.Z[6] = ONE[6] & infty;
+                p.p.Z[7] = ONE[7] & infty;
+#endif P256_LIMBS == 8
 
                 for (i = 1; i < 37; i++) {
                     unsigned int off = (idx - 1) / 8;
