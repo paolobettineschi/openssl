@@ -189,60 +189,61 @@ unsigned short BIO_ADDR_rawport(const BIO_ADDR *ap)
 static int addr_strings(const BIO_ADDR *ap, int numeric,
                         char **hostname, char **service)
 {
+#ifdef AI_PASSIVE
+    int ret = 0;
+    char host[NI_MAXHOST] = "", serv[NI_MAXSERV] = "";
+    int flags = 0;
+#endif
+
     if (BIO_sock_init() != 1)
         return 0;
 
-    if (1) {
 #ifdef AI_PASSIVE
-        int ret = 0;
-        char host[NI_MAXHOST] = "", serv[NI_MAXSERV] = "";
-        int flags = 0;
 
-        if (numeric)
-            flags |= NI_NUMERICHOST | NI_NUMERICSERV;
+    if (numeric)
+        flags |= NI_NUMERICHOST | NI_NUMERICSERV;
 
-        if ((ret = getnameinfo(BIO_ADDR_sockaddr(ap),
-                               BIO_ADDR_sockaddr_size(ap),
-                               host, sizeof(host), serv, sizeof(serv),
-                               flags)) != 0) {
+    if ((ret = getnameinfo(BIO_ADDR_sockaddr(ap),
+                           BIO_ADDR_sockaddr_size(ap),
+                           host, sizeof(host), serv, sizeof(serv),
+                           flags)) != 0) {
 # ifdef EAI_SYSTEM
-            if (ret == EAI_SYSTEM) {
-                SYSerr(SYS_F_GETNAMEINFO, get_last_socket_error());
-                BIOerr(BIO_F_ADDR_STRINGS, ERR_R_SYS_LIB);
-            } else
+        if (ret == EAI_SYSTEM) {
+            SYSerr(SYS_F_GETNAMEINFO, get_last_socket_error());
+            BIOerr(BIO_F_ADDR_STRINGS, ERR_R_SYS_LIB);
+        } else
 # endif
-            {
-                BIOerr(BIO_F_ADDR_STRINGS, ERR_R_SYS_LIB);
-                ERR_add_error_data(1, gai_strerror(ret));
-            }
-            return 0;
+        {
+            BIOerr(BIO_F_ADDR_STRINGS, ERR_R_SYS_LIB);
+            ERR_add_error_data(1, gai_strerror(ret));
         }
-
-        /* VMS getnameinfo() has a bug, it doesn't fill in serv, which
-         * leaves it with whatever garbage that happens to be there.
-         * However, we initialise serv with the empty string (serv[0]
-         * is therefore NUL), so it gets real easy to detect when things
-         * didn't go the way one might expect.
-         */
-        if (serv[0] == '\0') {
-            BIO_snprintf(serv, sizeof(serv), "%d",
-                         ntohs(BIO_ADDR_rawport(ap)));
-        }
-
-        if (hostname != NULL)
-            *hostname = OPENSSL_strdup(host);
-        if (service != NULL)
-            *service = OPENSSL_strdup(serv);
-    } else {
-#endif
-        if (hostname != NULL)
-            *hostname = OPENSSL_strdup(inet_ntoa(ap->s_in.sin_addr));
-        if (service != NULL) {
-            char serv[6];        /* port is 16 bits => max 5 decimal digits */
-            BIO_snprintf(serv, sizeof(serv), "%d", ntohs(ap->s_in.sin_port));
-            *service = OPENSSL_strdup(serv);
-        }
+        return 0;
     }
+
+    /* VMS getnameinfo() has a bug, it doesn't fill in serv, which
+     * leaves it with whatever garbage that happens to be there.
+     * However, we initialise serv with the empty string (serv[0]
+     * is therefore NUL), so it gets real easy to detect when things
+     * didn't go the way one might expect.
+     */
+    if (serv[0] == '\0') {
+        BIO_snprintf(serv, sizeof(serv), "%d",
+                     ntohs(BIO_ADDR_rawport(ap)));
+    }
+
+    if (hostname != NULL)
+        *hostname = OPENSSL_strdup(host);
+    if (service != NULL)
+        *service = OPENSSL_strdup(serv);
+#else               /* no AI_PASSIVE */
+    if (hostname != NULL)
+        *hostname = OPENSSL_strdup(inet_ntoa(ap->s_in.sin_addr));
+    if (service != NULL) {
+        char serv[6];        /* port is 16 bits => max 5 decimal digits */
+        int len = BIO_snprintf(serv, sizeof(serv), "%d", ntohs(ap->s_in.sin_port));
+        *service = OPENSSL_memdup(serv, len + 1);
+    }
+#endif
 
     if ((hostname != NULL && *hostname == NULL)
             || (service != NULL && *service == NULL)) {
@@ -632,6 +633,10 @@ int BIO_lookup(const char *host, const char *service,
                int family, int socktype, BIO_ADDRINFO **res)
 {
     int ret = 0;                 /* Assume failure */
+#ifdef AI_PASSIVE
+    int gai_ret = 0;
+    struct addrinfo hints;
+#endif
 
     switch(family) {
     case AF_INET:
@@ -663,38 +668,35 @@ int BIO_lookup(const char *host, const char *service,
     if (BIO_sock_init() != 1)
         return 0;
 
-    if (1) {
-        int gai_ret = 0;
 #ifdef AI_PASSIVE
-        struct addrinfo hints;
-        memset(&hints, 0, sizeof hints);
+    memset(&hints, 0, sizeof hints);
 
-        hints.ai_family = family;
-        hints.ai_socktype = socktype;
+    hints.ai_family = family;
+    hints.ai_socktype = socktype;
 
-        if (lookup_type == BIO_LOOKUP_SERVER)
-            hints.ai_flags |= AI_PASSIVE;
+    if (lookup_type == BIO_LOOKUP_SERVER)
+        hints.ai_flags |= AI_PASSIVE;
 
-        /* Note that |res| SHOULD be a 'struct addrinfo **' thanks to
-         * macro magic in bio_lcl.h
-         */
-        switch ((gai_ret = getaddrinfo(host, service, &hints, res))) {
+    /* Note that |res| SHOULD be a 'struct addrinfo **' thanks to
+     * macro magic in bio_lcl.h
+     */
+    switch ((gai_ret = getaddrinfo(host, service, &hints, res))) {
 # ifdef EAI_SYSTEM
-        case EAI_SYSTEM:
-            SYSerr(SYS_F_GETADDRINFO, get_last_socket_error());
-            BIOerr(BIO_F_BIO_LOOKUP, ERR_R_SYS_LIB);
-            break;
+    case EAI_SYSTEM:
+        SYSerr(SYS_F_GETADDRINFO, get_last_socket_error());
+        BIOerr(BIO_F_BIO_LOOKUP, ERR_R_SYS_LIB);
+        break;
 # endif
-        case 0:
-            ret = 1;             /* Success */
-            break;
-        default:
-            BIOerr(BIO_F_BIO_LOOKUP, ERR_R_SYS_LIB);
-            ERR_add_error_data(1, gai_strerror(gai_ret));
-            break;
-        }
-    } else {
-#endif
+    case 0:
+        ret = 1;             /* Success */
+        break;
+    default:
+        BIOerr(BIO_F_BIO_LOOKUP, ERR_R_SYS_LIB);
+        ERR_add_error_data(1, gai_strerror(gai_ret));
+        break;
+    }
+#else                               /* !defined AI_PASSIVE */
+    {
         const struct hostent *he;
 /*
  * Because struct hostent is defined for 32-bit pointers only with
@@ -866,6 +868,7 @@ int BIO_lookup(const char *host, const char *service,
      err:
         CRYPTO_THREAD_unlock(bio_lookup_lock);
     }
+#endif
 
     return ret;
 }
