@@ -187,8 +187,8 @@ static int EVP_Digest_MD4_loop(void *args);
 #endif
 #ifndef OPENSSL_NO_MD5
 static int MD5_loop(void *args);
-static int HMAC_loop(void *args);
 #endif
+static int HMAC_loop(void *args);
 static int SHA1_loop(void *args);
 static int SHA256_loop(void *args);
 static int SHA512_loop(void *args);
@@ -239,7 +239,7 @@ static int do_multi(int multi);
 #endif
 
 static const char *names[ALGOR_NUM] = {
-    "md2", "mdc2", "md4", "md5", "hmac(md5)", "sha1", "rmd160", "rc4",
+    "md2", "mdc2", "md4", "md5", "hmac(md5|sha1))", "sha1", "rmd160", "rc4",
     "des cbc", "des ede3", "idea cbc", "seed cbc",
     "rc2 cbc", "rc5-32/12 cbc", "blowfish cbc", "cast cbc",
     "aes-128 cbc", "aes-192 cbc", "aes-256 cbc",
@@ -431,8 +431,8 @@ static OPT_PAIR doit_choices[] = {
 #endif
 #ifndef OPENSSL_NO_MD5
     {"md5", D_MD5},
-    {"hmac", D_HMAC},
 #endif
+    {"hmac", D_HMAC},
     {"sha1", D_SHA1},
     {"sha256", D_SHA256},
     {"sha512", D_SHA512},
@@ -652,13 +652,14 @@ static int MD5_loop(void *args)
         MD5(buf, lengths[testnum], md5);
     return count;
 }
+#endif
 
 static int HMAC_loop(void *args)
 {
     loopargs_t *tempargs = *(loopargs_t **)args;
     unsigned char *buf = tempargs->buf;
     HMAC_CTX *hctx = tempargs->hctx;
-    unsigned char hmac[MD5_DIGEST_LENGTH];
+    unsigned char hmac[SHA_DIGEST_LENGTH];
     int count;
 
     for (count = 0; COND(c[D_HMAC][testnum]); count++) {
@@ -668,7 +669,6 @@ static int HMAC_loop(void *args)
     }
     return count;
 }
-#endif
 
 static int SHA1_loop(void *args)
 {
@@ -1448,6 +1448,12 @@ int speed_main(int argc, char **argv)
             doit[i] = 1;
             continue;
         }
+#ifndef OPENSSL_NO_MD5
+        if (strcmp(*argv, "hmac-md5") == 0) {
+            doit[D_HMAC] = 2;
+            continue;
+        }
+#endif
 #ifndef OPENSSL_NO_DES
         if (strcmp(*argv, "des") == 0) {
             doit[D_CBC_DES] = doit[D_EDE3_DES] = 1;
@@ -1902,6 +1908,7 @@ int speed_main(int argc, char **argv)
             print_result(D_MD5, testnum, count, d);
         }
     }
+#endif
 
     if (doit[D_HMAC]) {
         static const char hmac_key[] = "This is a key...";
@@ -1914,7 +1921,13 @@ int speed_main(int argc, char **argv)
                 exit(1);
             }
 
-            HMAC_Init_ex(loopargs[i].hctx, hmac_key, len, EVP_md5(), NULL);
+            
+#ifndef OPENSSL_NO_MD5
+            if (doit[D_HMAC] == 2) 
+                HMAC_Init_ex(loopargs[i].hctx, hmac_key, len, EVP_md5(), NULL);
+            else 
+#endif
+            HMAC_Init_ex(loopargs[i].hctx, hmac_key, len, EVP_sha1(), NULL);
         }
         for (testnum = 0; testnum < SIZE_NUM; testnum++) {
             print_message(names[D_HMAC], c[D_HMAC][testnum], lengths[testnum]);
@@ -1927,7 +1940,7 @@ int speed_main(int argc, char **argv)
             HMAC_CTX_free(loopargs[i].hctx);
         }
     }
-#endif
+
     if (doit[D_SHA1]) {
         for (testnum = 0; testnum < SIZE_NUM; testnum++) {
             print_message(names[D_SHA1], c[D_SHA1][testnum], lengths[testnum]);
