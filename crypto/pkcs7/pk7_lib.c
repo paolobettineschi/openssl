@@ -17,7 +17,7 @@
 long PKCS7_ctrl(PKCS7 *p7, int cmd, long larg, char *parg)
 {
     int nid;
-    long ret;
+    long ret = 0;
 
     nid = OBJ_obj2nid(p7->type);
 
@@ -35,7 +35,6 @@ long PKCS7_ctrl(PKCS7 *p7, int cmd, long larg, char *parg)
         } else {
             PKCS7err(PKCS7_F_PKCS7_CTRL,
                      PKCS7_R_OPERATION_NOT_SUPPORTED_ON_THIS_TYPE);
-            ret = 0;
         }
         break;
     case PKCS7_OP_GET_DETACHED_SIGNATURE:
@@ -49,13 +48,11 @@ long PKCS7_ctrl(PKCS7 *p7, int cmd, long larg, char *parg)
         } else {
             PKCS7err(PKCS7_F_PKCS7_CTRL,
                      PKCS7_R_OPERATION_NOT_SUPPORTED_ON_THIS_TYPE);
-            ret = 0;
         }
 
         break;
     default:
         PKCS7err(PKCS7_F_PKCS7_CTRL, PKCS7_R_UNKNOWN_OPERATION);
-        ret = 0;
     }
     return (ret);
 }

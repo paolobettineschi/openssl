@@ -68,7 +68,7 @@ int ASN1_verify(i2d_of_void *i2d, X509_ALGOR *a, ASN1_BIT_STRING *signature,
         ASN1err(ASN1_F_ASN1_VERIFY, ERR_R_EVP_LIB);
         goto err;
     }
-    ret = -1;
+    ret = -1;       /* Restore error code */
 
     if (EVP_VerifyFinal(ctx, (unsigned char *)signature->data,
                         (unsigned int)signature->length, pkey) <= 0) {
@@ -167,7 +167,6 @@ int ASN1_item_verify(const ASN1_ITEM *it, X509_ALGOR *a,
         ASN1err(ASN1_F_ASN1_ITEM_VERIFY, ERR_R_EVP_LIB);
         goto err;
     }
-    ret = -1;
 
     if (EVP_DigestVerifyFinal(ctx, signature->data,
                               (size_t)signature->length) <= 0) {

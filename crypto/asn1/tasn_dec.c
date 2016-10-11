@@ -624,7 +624,7 @@ static int asn1_d2i_ex_primitive(ASN1_VALUE **pval,
                                  const ASN1_ITEM *it,
                                  int tag, int aclass, char opt, ASN1_TLC *ctx)
 {
-    int ret = 0, utype;
+    int ret, utype;
     long plen;
     char cst, inf, free_cont = 0;
     const unsigned char *p;

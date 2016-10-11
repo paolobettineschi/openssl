@@ -150,7 +150,6 @@ static long sock_ctrl(BIO *b, int cmd, long num, void *ptr)
         break;
     case BIO_CTRL_DUP:
     case BIO_CTRL_FLUSH:
-        ret = 1;
         break;
     default:
         ret = 0;

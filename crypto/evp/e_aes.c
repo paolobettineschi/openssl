@@ -620,14 +620,13 @@ void aes256_t4_xts_decrypt(const unsigned char *in, unsigned char *out,
 static int aes_t4_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
                            const unsigned char *iv, int enc)
 {
-    int ret, mode, bits;
+    int ret = 0, mode, bits;
     EVP_AES_KEY *dat = EVP_C_DATA(EVP_AES_KEY,ctx);
 
     mode = EVP_CIPHER_CTX_mode(ctx);
     bits = EVP_CIPHER_CTX_key_length(ctx) * 8;
     if ((mode == EVP_CIPH_ECB_MODE || mode == EVP_CIPH_CBC_MODE)
         && !enc) {
-        ret = 0;
         aes_t4_set_decrypt_key(key, bits, &dat->ks.ks);
         dat->block = (block128_f) aes_t4_decrypt;
         switch (bits) {
@@ -647,7 +646,6 @@ static int aes_t4_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
             ret = -1;
         }
     } else {
-        ret = 0;
         aes_t4_set_encrypt_key(key, bits, &dat->ks.ks);
         dat->block = (block128_f) aes_t4_encrypt;
         switch (bits) {

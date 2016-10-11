@@ -386,7 +386,8 @@ static int pkey_ec_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
 {
     EC_KEY *ec = NULL;
     EC_PKEY_CTX *dctx = ctx->data;
-    int ret = 0;
+    int ret;
+
     if (dctx->gen_group == NULL) {
         ECerr(EC_F_PKEY_EC_PARAMGEN, EC_R_NO_PARAMETERS_SET);
         return 0;

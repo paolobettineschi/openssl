@@ -544,7 +544,7 @@ static int bio_zlib_flush(BIO *b)
 static long bio_zlib_ctrl(BIO *b, int cmd, long num, void *ptr)
 {
     BIO_ZLIB_CTX *ctx;
-    int ret, *ip;
+    int ret = 1, *ip;
     int ibs, obs;
     BIO *next = BIO_next(b);
 
@@ -556,7 +556,6 @@ static long bio_zlib_ctrl(BIO *b, int cmd, long num, void *ptr)
     case BIO_CTRL_RESET:
         ctx->ocount = 0;
         ctx->odone = 0;
-        ret = 1;
         break;
 
     case BIO_CTRL_FLUSH:
@@ -590,7 +589,6 @@ static long bio_zlib_ctrl(BIO *b, int cmd, long num, void *ptr)
             ctx->obuf = NULL;
             ctx->obufsize = obs;
         }
-        ret = 1;
         break;
 
     case BIO_C_DO_STATE_MACHINE:
@@ -602,7 +600,6 @@ static long bio_zlib_ctrl(BIO *b, int cmd, long num, void *ptr)
     default:
         ret = BIO_ctrl(next, cmd, num, ptr);
         break;
-
     }
 
     return ret;
