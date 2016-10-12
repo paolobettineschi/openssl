@@ -1061,6 +1061,10 @@ int ssl_add_clienthello_tlsext(SSL *s, WPACKET *pkt, int *al)
 
     /* Add Max Fragment Length extension if user enabled it. */
     if (IS_MAX_FRAGMENT_LENGTH_EXT_VALID(s->tlsext_max_fragment_length)) {
+        /*-
+         * 4 bytes for this extension type and extension length
+         * 1 byte for the Max Fragment Length code value.
+         */
         if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_max_fragment_length)
                 /* Sub-packet for Max Fragment Length extension (1 byte) */
                 || !WPACKET_start_sub_packet_u16(pkt)
@@ -1598,8 +1602,11 @@ int ssl_add_serverhello_tlsext(SSL *s, WPACKET *pkt, int *al)
     }
 
     if (USE_MAX_FRAGMENT_LENGTH_EXT(s->session)) {
-        /* TODO : ssl_add_max_fragment_len() */
-        /* Sub-packet for Max Fragment Length extension (1 byte) */
+        /*-
+         * 4 bytes for this extension type and extension length
+         * 1 byte for the Max Fragment Length code value.
+         * TODO : ssl_add_max_fragment_len()
+         */
         if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_max_fragment_length)
                 || !WPACKET_start_sub_packet_u16(pkt)
                 || !WPACKET_put_bytes_u8(pkt, s->session->tlsext_max_fragment_length)
