@@ -2977,8 +2977,7 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
 #endif                          /* !OPENSSL_NO_EC */
     case SSL_CTRL_SET_TLSEXT_MAX_FRAGMENT_LENGTH:
         if (((unsigned char)larg != TLSEXT_max_fragment_length_DISABLED) &&
-            (((unsigned char)larg < TLSEXT_max_fragment_length_2_TO_9) ||
-             ((unsigned char)larg > TLSEXT_max_fragment_length_2_TO_12))) {
+                !IS_MAX_FRAGMENT_LENGTH_EXT_VALID((unsigned char) larg)) {
             SSLerr(SSL_F_SSL3_CTRL, SSL_R_SSL3_EXT_INVALID_MAX_FRAGMENT_LENGTH);
             return 0;
         }
@@ -3329,8 +3328,7 @@ long ssl3_ctx_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg)
 #endif                          /* !OPENSSL_NO_EC */
     case SSL_CTRL_SET_TLSEXT_MAX_FRAGMENT_LENGTH:
         if (((unsigned char)larg != TLSEXT_max_fragment_length_DISABLED) &&
-            (((unsigned char)larg < TLSEXT_max_fragment_length_2_TO_9) ||
-             ((unsigned char)larg > TLSEXT_max_fragment_length_2_TO_12))) {
+                !IS_MAX_FRAGMENT_LENGTH_EXT_VALID((unsigned char) larg)) {
             SSLerr(SSL_F_SSL3_CTX_CTRL, SSL_R_SSL3_EXT_INVALID_MAX_FRAGMENT_LENGTH);
             return 0;
         }

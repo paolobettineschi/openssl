@@ -490,8 +490,8 @@ int ssl3_get_record(SSL *s)
             goto f_err;
         }
 
-        if (SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s)
-                && rr[j].length > SSL_GET_MAX_FRAGMENT_LENGTH(s)) {
+        if (s->session && USE_MAX_FRAGMENT_LENGTH_EXT(s->session)
+                && rr[j].length > GET_MAX_FRAGMENT_LENGTH(s->session)) {
             al = SSL_AD_RECORD_OVERFLOW;
             SSLerr(SSL_F_SSL3_GET_RECORD, SSL_R_PACKET_LENGTH_TOO_LONG);
             goto f_err;

@@ -402,9 +402,9 @@ int ssl3_write_bytes(SSL *s, int type, const void *buf_, size_t len,
     if (type == SSL3_RT_APPLICATION_DATA)
         max_send_fragment = s->max_send_fragment;
 
-    if (SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s)) {
-        if (max_send_fragment > SSL_GET_MAX_FRAGMENT_LENGTH(s))
-            max_send_fragment = SSL_GET_MAX_FRAGMENT_LENGTH(s);
+    if (USE_MAX_FRAGMENT_LENGTH_EXT(s->session)) {
+        if (max_send_fragment > GET_MAX_FRAGMENT_LENGTH(s->session))
+            max_send_fragment = GET_MAX_FRAGMENT_LENGTH(s->session);
     }
     /*
      * Depending on platform multi-block can deliver several *times*
@@ -607,8 +607,8 @@ int ssl3_write_bytes(SSL *s, int type, const void *buf_, size_t len,
             }
         }
 
-        if (SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s)) {
-            unsigned int max_fragment_len =  SSL_GET_MAX_FRAGMENT_LENGTH(s);
+        if (USE_MAX_FRAGMENT_LENGTH_EXT(s->session)) {
+            unsigned int max_fragment_len = GET_MAX_FRAGMENT_LENGTH(s->session);
             for (j = 0; j < numpipes; j++) {
                 if (pipelens[j] > max_fragment_len)
                     pipelens[j] = max_fragment_len;

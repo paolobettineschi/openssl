@@ -1060,8 +1060,7 @@ int ssl_add_clienthello_tlsext(SSL *s, WPACKET *pkt, int *al)
 #endif
 
     /* Add Max Fragment Length extension if user enabled it. */
-    if (s->tlsext_max_fragment_length >= TLSEXT_max_fragment_length_2_TO_9
-        && s->tlsext_max_fragment_length <= TLSEXT_max_fragment_length_2_TO_12) {
+    if (IS_MAX_FRAGMENT_LENGTH_EXT_VALID(s->tlsext_max_fragment_length)) {
         if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_max_fragment_length)
                 /* Sub-packet for Max Fragment Length extension (1 byte) */
                 || !WPACKET_start_sub_packet_u16(pkt)
@@ -1598,8 +1597,9 @@ int ssl_add_serverhello_tlsext(SSL *s, WPACKET *pkt, int *al)
         return 0;
     }
 
-    if (SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s)) {
+    if (USE_MAX_FRAGMENT_LENGTH_EXT(s->session)) {
         /* TODO : ssl_add_max_fragment_len() */
+        /* Sub-packet for Max Fragment Length extension (1 byte) */
         if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_max_fragment_length)
                 || !WPACKET_start_sub_packet_u16(pkt)
                 || !WPACKET_put_bytes_u8(pkt, s->session->tlsext_max_fragment_length)
@@ -2276,8 +2276,7 @@ static int ssl_scan_clienthello_tlsext(SSL *s, CLIENTHELLO_MSG *hello, int *al)
             }
 
             if (!PACKET_get_1(&currext->data, &value)
-                || value < TLSEXT_max_fragment_length_2_TO_9
-                || value > TLSEXT_max_fragment_length_2_TO_12) {
+                || !IS_MAX_FRAGMENT_LENGTH_EXT_VALID(value)) {
                 *al = SSL_AD_ILLEGAL_PARAMETER;
                 return 0;
             }
@@ -2622,8 +2621,7 @@ static int ssl_scan_serverhello_tlsext(SSL *s, PACKET *pkt, int *al)
 
             if (size != 1
                 || !PACKET_get_1(&spkt, &value)
-                || value < TLSEXT_max_fragment_length_2_TO_9
-                || value > TLSEXT_max_fragment_length_2_TO_12) {
+                || !IS_MAX_FRAGMENT_LENGTH_EXT_VALID(value)) {
                 *al = SSL_AD_ILLEGAL_PARAMETER;
                 return 0;
             }

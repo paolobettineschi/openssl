@@ -385,12 +385,13 @@
 # define SSL_CLIENT_USE_SIGALGS(s)        \
     SSL_CLIENT_USE_TLS1_2_CIPHERS(s)
 
-# define SSL_USE_MAX_FRAGMENT_LENGTH_EXT(s) \
-    (s->session) && \
-    ((s->session->tlsext_max_fragment_length >= TLSEXT_max_fragment_length_2_TO_9) && \
-     (s->session->tlsext_max_fragment_length <= TLSEXT_max_fragment_length_2_TO_12))
-# define SSL_GET_MAX_FRAGMENT_LENGTH(s) \
-    (2U << (7 + s->session->tlsext_max_fragment_length))
+# define IS_MAX_FRAGMENT_LENGTH_EXT_VALID(value) \
+    (((value) >= TLSEXT_max_fragment_length_2_TO_9) && \
+     ((value) <= TLSEXT_max_fragment_length_2_TO_12))
+# define USE_MAX_FRAGMENT_LENGTH_EXT(session) \
+    IS_MAX_FRAGMENT_LENGTH_EXT_VALID(session->tlsext_max_fragment_length)
+# define GET_MAX_FRAGMENT_LENGTH(session) \
+    (2U << (7 + session->tlsext_max_fragment_length))
 
 # define SSL_USE_ETM(s) (s->s3->flags & TLS1_FLAGS_ENCRYPT_THEN_MAC)
 
