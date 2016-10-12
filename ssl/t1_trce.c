@@ -505,6 +505,14 @@ static ssl_trace_tbl ssl_point_tbl[] = {
     {2, "ansiX962_compressed_char2"}
 };
 
+static ssl_trace_tbl ssl_mfl_tbl[] = {
+    {0, "disabled"},
+    {1, "max_fragment_length := 2^9 (512 bits)"},
+    {2, "max_fragment_length := 2^10 (1024)"},
+    {3, "max_fragment_length := 2^11 (2048)"},
+    {4, "max_fragment_length := 2^12 (4096)"}
+};
+
 static ssl_trace_tbl ssl_md_tbl[] = {
     {TLSEXT_hash_none, "none"},
     {TLSEXT_hash_md5, "md5"},
@@ -646,6 +654,12 @@ static int ssl_print_extension(BIO *bio, int indent, int server, int extype,
     BIO_printf(bio, "extension_type=%s(%d), length=%d\n",
                ssl_trace_str(extype, ssl_exts_tbl), extype, (int)extlen);
     switch (extype) {
+    case TLSEXT_TYPE_max_fragment_length:
+        if (extlen < 1)
+            return 0;
+        xlen = extlen;
+        return ssl_trace_list(bio, indent + 2, ext, xlen, 1, ssl_mfl_tbl);
+
     case TLSEXT_TYPE_ec_point_formats:
         if (extlen < 1)
             return 0;
