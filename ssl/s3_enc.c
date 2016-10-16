@@ -262,8 +262,7 @@ int ssl3_setup_key_block(SSL *s)
     unsigned char *p;
     const EVP_CIPHER *c;
     const EVP_MD *hash;
-    int num;
-    int ret = 0;
+    int num, ret;
     SSL_COMP *comp;
 
     if (s->s3->tmp.key_block_length != 0)

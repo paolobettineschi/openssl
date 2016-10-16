@@ -2089,7 +2089,6 @@ int s_client_main(int argc, char **argv)
             BIO_free(fbio);
             if (numeric != 670) {
                 BIO_printf(bio_err, "Server does not support STARTTLS.\n");
-                ret = 1;
                 goto shut;
             }
         }

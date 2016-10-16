@@ -2425,11 +2425,11 @@ static int ssl_session_cmp(const SSL_SESSION *a, const SSL_SESSION *b)
 
 SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
 {
-    SSL_CTX *ret = NULL;
+    SSL_CTX *ret;
 
     if (meth == NULL) {
         SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_NULL_SSL_METHOD_PASSED);
-        return (NULL);
+        return NULL;
     }
 
     if (!OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS, NULL))
@@ -2442,7 +2442,7 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
 
     if (SSL_get_ex_data_X509_STORE_CTX_idx() < 0) {
         SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_X509_VERIFICATION_SETUP_PROBLEMS);
-        goto err;
+        return NULL;
     }
     ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL)

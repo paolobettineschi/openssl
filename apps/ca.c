@@ -718,7 +718,6 @@ end_of_options:
     /* Read extensions config file                                   */
     if (extfile) {
         if ((extconf = app_load_config(extfile)) == NULL) {
-            ret = 1;
             goto end;
         }
 
@@ -800,7 +799,6 @@ end_of_options:
                     BIO_printf(bio_err,
                                "Error Loading extension section %s\n",
                                extensions);
-                    ret = 1;
                     goto end;
                 }
             }
@@ -1067,7 +1065,6 @@ end_of_options:
                 BIO_printf(bio_err,
                            "Error Loading CRL extension section %s\n",
                            crl_ext);
-                ret = 1;
                 goto end;
             }
         }
@@ -1218,7 +1215,7 @@ end_of_options:
         }
     }
     /*****************************************************************/
-    ret = 0;
+    ret = 0;                                    /* Success */
  end:
     BIO_free_all(Sout);
     BIO_free_all(out);
