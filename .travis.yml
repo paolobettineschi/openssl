@@ -126,6 +126,5 @@ after_success:
       fi;
 
 notifications:
-    email:
-        - openssl-commits@openssl.org
-
+    disable: true
+    email: false
