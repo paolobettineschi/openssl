@@ -321,18 +321,15 @@ int crl_main(int argc, char **argv)
     if (text)
         X509_CRL_print(out, x);
 
-    if (noout) {
-        ret = 0;
-        goto end;
-    }
-
-    if (outformat == FORMAT_ASN1)
-        i = (int)i2d_X509_CRL_bio(out, x);
-    else
-        i = PEM_write_bio_X509_CRL(out, x);
-    if (!i) {
-        BIO_printf(bio_err, "unable to write CRL\n");
-        goto end;
+    if (noout == 0) {
+        if (outformat == FORMAT_ASN1)
+            i = i2d_X509_CRL_bio(out, x);
+        else
+            i = PEM_write_bio_X509_CRL(out, x);
+        if (i == 0) {
+            BIO_printf(bio_err, "unable to write CRL\n");
+            goto end;
+        }
     }
     ret = 0;
 

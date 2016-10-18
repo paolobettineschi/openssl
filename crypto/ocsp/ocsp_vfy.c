@@ -331,7 +331,7 @@ int OCSP_request_verify(OCSP_REQUEST *req, STACK_OF(X509) *certs,
     X509 *signer;
     X509_NAME *nm;
     GENERAL_NAME *gen;
-    int ret = 0;
+    int ret, verify = 0;
     X509_STORE_CTX *ctx = X509_STORE_CTX_new();
 
     if (ctx == NULL) {
@@ -391,14 +391,11 @@ int OCSP_request_verify(OCSP_REQUEST *req, STACK_OF(X509) *certs,
             goto err;
         }
     }
-    ret = 1;
-    goto end;
+    verify = 1;
 
 err:
-    ret = 0;
-end:
     X509_STORE_CTX_free(ctx);
-    return ret;
+    return verify;
 
 }
 

@@ -1387,9 +1387,8 @@ int save_serial(const char *serialfile, const char *suffix, const BIGNUM *serial
 {
     char buf[1][BSIZE];
     BIO *out = NULL;
-    int ret = 0;
     ASN1_INTEGER *ai = NULL;
-    int j;
+    int j, ret = 0;
 
     if (suffix == NULL)
         j = strlen(serialfile);
