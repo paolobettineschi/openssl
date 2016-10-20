@@ -181,7 +181,8 @@ int GENERAL_NAME_print(BIO *out, GENERAL_NAME *gen)
 
     case GEN_RID:
         BIO_printf(out, "Registered ID:");
-        i2a_ASN1_OBJECT(out, gen->d.rid);
+        if (i2a_ASN1_OBJECT(out, gen->d.rid) < 0)
+            return 0;
         break;
     }
     return 1;

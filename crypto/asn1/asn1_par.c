@@ -177,7 +177,8 @@ static int asn1_parse2(BIO *bp, const unsigned char **pp, long length,
                 if (d2i_ASN1_OBJECT(&o, &opp, len + hl) != NULL) {
                     if (BIO_write(bp, ":", 1) <= 0)
                         goto end;
-                    i2a_ASN1_OBJECT(bp, o);
+                    if (i2a_ASN1_OBJECT(bp, o) < 0)
+                        goto end;
                 } else {
                     if (BIO_puts(bp, ":BAD OBJECT") <= 0)
                         goto end;
