@@ -113,7 +113,6 @@ static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
         return 0;
     if (*p == 0x80) {
         *inf = 1;
-        ret = 0;
         p++;
     } else {
         *inf = 0;
