@@ -23,7 +23,6 @@
  */
 
 /* ASN1_PCTX routines */
-
 static ASN1_PCTX default_pctx = {
     ASN1_PCTX_FLAGS_SHOW_ABSENT, /* flags */
     0,                          /* nm_flags */
@@ -122,6 +121,7 @@ int ASN1_item_print(BIO *out, ASN1_VALUE *ifld, int indent,
                     const ASN1_ITEM *it, const ASN1_PCTX *pctx)
 {
     const char *sname;
+
     if (pctx == NULL)
         pctx = &default_pctx;
     if (pctx->flags & ASN1_PCTX_FLAGS_NO_STRUCT_NAME)
@@ -143,6 +143,7 @@ static int asn1_item_print_ctx(BIO *out, ASN1_VALUE **fld, int indent,
     ASN1_aux_cb *asn1_cb;
     ASN1_PRINT_ARG parg;
     int i;
+
     if (aux && aux->asn1_cb) {
         parg.out = out;
         parg.indent = indent;
@@ -197,7 +198,7 @@ static int asn1_item_print_ctx(BIO *out, ASN1_VALUE **fld, int indent,
         /* CHOICE type, get selector */
         i = asn1_get_choice_selector(fld, it);
         /* This should never happen... */
-        if ((i < 0) || (i >= it->tcount)) {
+        if (i < 0 || i >= it->tcount) {
             if (BIO_printf(out, "ERROR: selector [%d] invalid\n", i) <= 0)
                 return 0;
             return 1;
@@ -267,6 +268,7 @@ static int asn1_template_print_ctx(BIO *out, ASN1_VALUE **fld, int indent,
     int i, flags;
     const char *sname, *fname;
     ASN1_VALUE *tfld;
+
     flags = tt->flags;
     if (pctx->flags & ASN1_PCTX_FLAGS_SHOW_FIELD_STRUCT_NAME)
         sname = ASN1_ITEM_ptr(tt->item)->sname;
@@ -369,19 +371,17 @@ static int asn1_print_fsname(BIO *out, int indent,
 static int asn1_print_boolean(BIO *out, int boolval)
 {
     const char *str;
+
     switch (boolval) {
     case -1:
         str = "BOOL ABSENT";
         break;
-
     case 0:
         str = "FALSE";
         break;
-
     default:
         str = "TRUE";
         break;
-
     }
 
     if (BIO_puts(out, str) <= 0)
@@ -392,9 +392,9 @@ static int asn1_print_boolean(BIO *out, int boolval)
 
 static int asn1_print_integer(BIO *out, const ASN1_INTEGER *str)
 {
-    char *s;
     int ret = 1;
-    s = i2s_ASN1_INTEGER(NULL, str);
+    char *s = i2s_ASN1_INTEGER(NULL, str);
+
     if (s == NULL)
         return 0;
     if (BIO_puts(out, s) <= 0)
@@ -406,8 +406,8 @@ static int asn1_print_integer(BIO *out, const ASN1_INTEGER *str)
 static int asn1_print_oid(BIO *out, const ASN1_OBJECT *oid)
 {
     char objbuf[80];
-    const char *ln;
-    ln = OBJ_nid2ln(OBJ_obj2nid(oid));
+    const char *ln = OBJ_nid2ln(OBJ_obj2nid(oid));
+
     if (!ln)
         ln = "";
     OBJ_obj2txt(objbuf, sizeof objbuf, oid, 1);
@@ -436,10 +436,11 @@ static int asn1_primitive_print(BIO *out, ASN1_VALUE **fld,
                                 const ASN1_PCTX *pctx)
 {
     long utype;
-    ASN1_STRING *str;
     int ret = 1, needlf = 1;
     const char *pname;
+    ASN1_STRING *str;
     const ASN1_PRIMITIVE_FUNCS *pf;
+
     pf = it->funcs;
     if (!asn1_print_fsname(out, indent, fname, sname, pctx))
         return 0;
