@@ -14,19 +14,22 @@
 #include "internal/cryptlib.h"
 #include <openssl/pem.h>
 
-static int ocsp_certid_print(BIO *bp, OCSP_CERTID *a, int indent)
+static int ocsp_certid_print(BIO *bp, const OCSP_CERTID *a, int indent)
 {
-    BIO_printf(bp, "%*sCertificate ID:\n", indent, "");
+    if (BIO_printf(bp, "%*sCertificate ID:\n", indent, "") < 0)
+        return 0;
     indent += 2;
-    BIO_printf(bp, "%*sHash Algorithm: ", indent, "");
-    i2a_ASN1_OBJECT(bp, a->hashAlgorithm.algorithm);
-    BIO_printf(bp, "\n%*sIssuer Name Hash: ", indent, "");
-    i2a_ASN1_STRING(bp, &a->issuerNameHash, 0);
-    BIO_printf(bp, "\n%*sIssuer Key Hash: ", indent, "");
-    i2a_ASN1_STRING(bp, &a->issuerKeyHash, 0);
-    BIO_printf(bp, "\n%*sSerial Number: ", indent, "");
-    i2a_ASN1_INTEGER(bp, &a->serialNumber);
-    BIO_printf(bp, "\n");
+    if (BIO_printf(bp, "%*sHash Algorithm: ", indent, "") < 0
+        || i2a_ASN1_OBJECT(bp, a->hashAlgorithm.algorithm) < 0
+        || BIO_printf(bp, "\n%*sIssuer Name Hash: ", indent, "") < 0
+        || i2a_ASN1_STRING(bp, &a->issuerNameHash, 0) < 0
+        || BIO_printf(bp, "\n%*sIssuer Key Hash: ", indent, "") < 0
+        || i2a_ASN1_STRING(bp, &a->issuerKeyHash, 0) < 0
+        || BIO_printf(bp, "\n%*sSerial Number: ", indent, "") < 0
+        || i2a_ASN1_INTEGER(bp, &a->serialNumber) < 0
+        || BIO_printf(bp, "\n") < 0)
+        return 0;
+
     return 1;
 }
 
