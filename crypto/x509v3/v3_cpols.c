@@ -23,9 +23,9 @@ static int i2r_certpol(X509V3_EXT_METHOD *method, STACK_OF(POLICYINFO) *pol,
                        BIO *out, int indent);
 static STACK_OF(POLICYINFO) *r2i_certpol(X509V3_EXT_METHOD *method,
                                          X509V3_CTX *ctx, const char *value);
-static void print_qualifiers(BIO *out, STACK_OF(POLICYQUALINFO) *quals,
-                             int indent);
-static void print_notice(BIO *out, USERNOTICE *notice, int indent);
+static int print_qualifiers(BIO *out, STACK_OF(POLICYQUALINFO) *quals,
+                            int indent);
+static int print_notice(BIO *out, const USERNOTICE *notice, int indent);
 static POLICYINFO *policy_section(X509V3_CTX *ctx,
                                   STACK_OF(CONF_VALUE) *polstrs, int ia5org);
 static POLICYQUALINFO *notice_section(X509V3_CTX *ctx,
@@ -355,73 +355,97 @@ static int nref_nos(STACK_OF(ASN1_INTEGER) *nnums, STACK_OF(CONF_VALUE) *nos)
 static int i2r_certpol(X509V3_EXT_METHOD *method, STACK_OF(POLICYINFO) *pol,
                        BIO *out, int indent)
 {
-    int i;
+    int i, ret = 0;
     POLICYINFO *pinfo;
+
     /* First print out the policy OIDs */
     for (i = 0; i < sk_POLICYINFO_num(pol); i++) {
         pinfo = sk_POLICYINFO_value(pol, i);
         BIO_printf(out, "%*sPolicy: ", indent, "");
-        i2a_ASN1_OBJECT(out, pinfo->policyid);
+        if (i2a_ASN1_OBJECT(out, pinfo->policyid) < 0)
+            goto err;
         BIO_puts(out, "\n");
-        if (pinfo->qualifiers)
-            print_qualifiers(out, pinfo->qualifiers, indent + 2);
+        if (pinfo->qualifiers
+            && print_qualifiers(out, pinfo->qualifiers, indent + 2) == 0)
+            goto err;
     }
-    return 1;
+    ret = 1;
+err:
+    return ret;
 }
 
-static void print_qualifiers(BIO *out, STACK_OF(POLICYQUALINFO) *quals,
-                             int indent)
+static int print_qualifiers(BIO *out, STACK_OF(POLICYQUALINFO) *quals,
+                            int indent)
 {
     POLICYQUALINFO *qualinfo;
-    int i;
+    int i, ret = 0;
+
     for (i = 0; i < sk_POLICYQUALINFO_num(quals); i++) {
         qualinfo = sk_POLICYQUALINFO_value(quals, i);
+
         switch (OBJ_obj2nid(qualinfo->pqualid)) {
         case NID_id_qt_cps:
-            BIO_printf(out, "%*sCPS: %s\n", indent, "",
-                       qualinfo->d.cpsuri->data);
+            if (BIO_printf(out, "%*sCPS: %s\n", indent, "",
+                           qualinfo->d.cpsuri->data) < 0)
+                goto err;
             break;
 
         case NID_id_qt_unotice:
-            BIO_printf(out, "%*sUser Notice:\n", indent, "");
-            print_notice(out, qualinfo->d.usernotice, indent + 2);
+            if (BIO_printf(out, "%*sUser Notice:\n", indent, "") < 0)
+                goto err;
+            ret = print_notice(out, qualinfo->d.usernotice, indent + 2);
             break;
 
         default:
-            BIO_printf(out, "%*sUnknown Qualifier: ", indent + 2, "");
-
-            i2a_ASN1_OBJECT(out, qualinfo->pqualid);
+            if (BIO_printf(out, "%*sUnknown Qualifier: ", indent + 2, "") < 0)
+                goto err;
+            if (i2a_ASN1_OBJECT(out, qualinfo->pqualid) < 0)
+                goto err;
             BIO_puts(out, "\n");
             break;
         }
     }
+    return ret;
+err:
+    return 0;
 }
 
-static void print_notice(BIO *out, USERNOTICE *notice, int indent)
+static int print_notice(BIO *out, const USERNOTICE *notice, int indent)
 {
-    int i;
+    int i, ret = 0;
+
     if (notice->noticeref) {
-        NOTICEREF *ref;
-        ref = notice->noticeref;
-        BIO_printf(out, "%*sOrganization: %s\n", indent, "",
-                   ref->organization->data);
-        BIO_printf(out, "%*sNumber%s: ", indent, "",
-                   sk_ASN1_INTEGER_num(ref->noticenos) > 1 ? "s" : "");
+        NOTICEREF *ref = notice->noticeref;
+
+        if (BIO_printf(out, "%*sOrganization: %s\n", indent, "",
+                       ref->organization->data) < 0)
+            goto err;
+
+        if (BIO_printf(out, "%*sNumber%s: ", indent, "",
+                       sk_ASN1_INTEGER_num(ref->noticenos) > 1 ? "s" : "") < 0)
+            goto err;
+
         for (i = 0; i < sk_ASN1_INTEGER_num(ref->noticenos); i++) {
-            ASN1_INTEGER *num;
             char *tmp;
-            num = sk_ASN1_INTEGER_value(ref->noticenos, i);
+            ASN1_INTEGER *num = sk_ASN1_INTEGER_value(ref->noticenos, i);
+
             if (i)
                 BIO_puts(out, ", ");
             tmp = i2s_ASN1_INTEGER(NULL, num);
+            if (tmp == NULL)
+                goto err;
             BIO_puts(out, tmp);
             OPENSSL_free(tmp);
         }
         BIO_puts(out, "\n");
     }
-    if (notice->exptext)
-        BIO_printf(out, "%*sExplicit Text: %s\n", indent, "",
-                   notice->exptext->data);
+    if (notice->exptext 
+        && BIO_printf(out, "%*sExplicit Text: %s\n", indent, "",
+                   notice->exptext->data) < 0)
+        return 0;
+    ret = 1;
+err:
+    return ret;
 }
 
 void X509_POLICY_NODE_print(BIO *out, X509_POLICY_NODE *node, int indent)

@@ -61,11 +61,15 @@ static int sxnet_i2r(X509V3_EXT_METHOD *method, SXNET *sx, BIO *out,
     char *tmp;
     SXNETID *id;
     int i;
+
     v = ASN1_INTEGER_get(sx->version);
-    BIO_printf(out, "%*sVersion: %ld (0x%lX)", indent, "", v + 1, v);
+    if (BIO_printf(out, "%*sVersion: %ld (0x%lX)", indent, "", v + 1, v) < 0)
+        return 0;
     for (i = 0; i < sk_SXNETID_num(sx->ids); i++) {
         id = sk_SXNETID_value(sx->ids, i);
         tmp = i2s_ASN1_INTEGER(NULL, id->zone);
+        if (tmp == NULL)
+            return 0;
         BIO_printf(out, "\n%*sZone: %s, User: ", indent, "", tmp);
         OPENSSL_free(tmp);
         ASN1_STRING_print(out, id->user);
@@ -139,6 +143,7 @@ int SXNET_add_id_INTEGER(SXNET **psx, ASN1_INTEGER *zone, const char *user,
 {
     SXNET *sx = NULL;
     SXNETID *id = NULL;
+
     if (!psx || !zone || !user) {
         X509V3err(X509V3_F_SXNET_ADD_ID_INTEGER,
                   X509V3_R_INVALID_NULL_ARGUMENT);
