@@ -64,20 +64,16 @@ void RSA_blinding_off(RSA *rsa)
 
 int RSA_blinding_on(RSA *rsa, BN_CTX *ctx)
 {
-    int ret = 0;
-
     if (rsa->blinding != NULL)
         RSA_blinding_off(rsa);
 
     rsa->blinding = RSA_setup_blinding(rsa, ctx);
     if (rsa->blinding == NULL)
-        goto err;
 
     rsa->flags |= RSA_FLAG_BLINDING;
     rsa->flags &= ~RSA_FLAG_NO_BLINDING;
-    ret = 1;
- err:
-    return (ret);
+
+    return 1;
 }
 
 static BIGNUM *rsa_get_public_exp(const BIGNUM *d, const BIGNUM *p,

@@ -317,7 +317,6 @@ static long asn1_bio_ctrl(BIO *b, int cmd, long arg1, void *arg2)
 {
     BIO_ASN1_BUF_CTX *ctx;
     BIO_ASN1_EX_FUNCS *ex_func;
-    long ret = 1;
     BIO *next;
 
     ctx = BIO_get_data(b);
@@ -370,7 +369,7 @@ static long asn1_bio_ctrl(BIO *b, int cmd, long arg1, void *arg2)
         }
 
         if (ctx->state == ASN1_STATE_POST_COPY) {
-            ret = asn1_bio_flush_ex(b, ctx, ctx->suffix_free,
+            long ret = asn1_bio_flush_ex(b, ctx, ctx->suffix_free,
                                     ASN1_STATE_DONE);
             if (ret <= 0)
                 return ret;
@@ -378,19 +377,17 @@ static long asn1_bio_ctrl(BIO *b, int cmd, long arg1, void *arg2)
 
         if (ctx->state == ASN1_STATE_DONE)
             return BIO_ctrl(next, cmd, arg1, arg2);
-        else {
-            BIO_clear_retry_flags(b);
-            return 0;
-        }
+
+        BIO_clear_retry_flags(b);
+        return 0;
 
     default:
         if (next == NULL)
             return 0;
         return BIO_ctrl(next, cmd, arg1, arg2);
-
     }
 
-    return ret;
+    return 1;
 }
 
 static int asn1_bio_set_ex(BIO *b, int cmd,
