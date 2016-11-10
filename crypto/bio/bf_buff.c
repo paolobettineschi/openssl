@@ -293,7 +293,7 @@ static long buffer_ctrl(BIO *b, int cmd, long num, void *ptr)
         ctx->ibuf_off = 0;
         ctx->ibuf_len = (int)num;
         memcpy(ctx->ibuf, ptr, (int)num);
-        ret = 1;
+        /* ret = 1; */
         break;
     case BIO_C_SET_BUFF_SIZE:
         if (ptr != NULL) {
@@ -394,7 +394,7 @@ static long buffer_ctrl(BIO *b, int cmd, long num, void *ptr)
 
 static long buffer_callback_ctrl(BIO *b, int cmd, bio_info_cb *fp)
 {
-    long ret = 1;
+    long ret;
 
     if (b->next_bio == NULL)
         return (0);
@@ -455,5 +455,5 @@ static int buffer_gets(BIO *b, char *buf, int size)
 
 static int buffer_puts(BIO *b, const char *str)
 {
-    return (buffer_write(b, str, strlen(str)));
+    return buffer_write(b, str, strlen(str));
 }

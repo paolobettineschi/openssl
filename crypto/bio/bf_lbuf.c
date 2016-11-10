@@ -93,7 +93,7 @@ static int linebuffer_free(BIO *a)
 
 static int linebuffer_read(BIO *b, char *out, int outl)
 {
-    int ret = 0;
+    int ret;
 
     if (out == NULL)
         return (0);
@@ -102,7 +102,7 @@ static int linebuffer_read(BIO *b, char *out, int outl)
     ret = BIO_read(b->next_bio, out, outl);
     BIO_clear_retry_flags(b);
     BIO_copy_next_retry(b);
-    return (ret);
+    return ret;
 }
 
 static int linebuffer_write(BIO *b, const char *in, int inl)
@@ -205,8 +205,7 @@ static long linebuffer_ctrl(BIO *b, int cmd, long num, void *ptr)
     BIO_LINEBUFFER_CTX *ctx;
     long ret = 1;
     char *p;
-    int r;
-    int obs;
+    int r, obs;
 
     ctx = (BIO_LINEBUFFER_CTX *)b->ptr;
 
@@ -298,7 +297,7 @@ static long linebuffer_ctrl(BIO *b, int cmd, long num, void *ptr)
 
 static long linebuffer_callback_ctrl(BIO *b, int cmd, bio_info_cb *fp)
 {
-    long ret = 1;
+    long ret;
 
     if (b->next_bio == NULL)
         return (0);
@@ -319,5 +318,5 @@ static int linebuffer_gets(BIO *b, char *buf, int size)
 
 static int linebuffer_puts(BIO *b, const char *str)
 {
-    return (linebuffer_write(b, str, strlen(str)));
+    return linebuffer_write(b, str, strlen(str));
 }

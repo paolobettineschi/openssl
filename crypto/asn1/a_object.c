@@ -200,9 +200,9 @@ ASN1_OBJECT *d2i_ASN1_OBJECT(ASN1_OBJECT **a, const unsigned char **pp,
 {
     const unsigned char *p;
     long len;
-    int tag, xclass;
-    int inf, i;
-    ASN1_OBJECT *ret = NULL;
+    int tag, xclass, inf, i;
+    ASN1_OBJECT *ret;
+
     p = *pp;
     inf = ASN1_get_object(&p, &len, &tag, &xclass, length);
     if (inf & 0x80) {
@@ -220,13 +220,13 @@ ASN1_OBJECT *d2i_ASN1_OBJECT(ASN1_OBJECT **a, const unsigned char **pp,
     return ret;
  err:
     ASN1err(ASN1_F_D2I_ASN1_OBJECT, i);
-    return (NULL);
+    return NULL;
 }
 
 ASN1_OBJECT *c2i_ASN1_OBJECT(ASN1_OBJECT **a, const unsigned char **pp,
                              long len)
 {
-    ASN1_OBJECT *ret = NULL, tobj;
+    ASN1_OBJECT *ret, tobj;
     const unsigned char *p;
     unsigned char *data;
     int i, length;
@@ -280,7 +280,7 @@ ASN1_OBJECT *c2i_ASN1_OBJECT(ASN1_OBJECT **a, const unsigned char **pp,
     if ((a == NULL) || ((*a) == NULL) ||
         !((*a)->flags & ASN1_OBJECT_FLAG_DYNAMIC)) {
         if ((ret = ASN1_OBJECT_new()) == NULL)
-            return (NULL);
+            return NULL;
     } else
         ret = (*a);
 
