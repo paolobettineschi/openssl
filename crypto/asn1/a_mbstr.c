@@ -44,15 +44,13 @@ int ASN1_mbstring_ncopy(ASN1_STRING **out, const unsigned char *in, int len,
                         int inform, unsigned long mask,
                         long minsize, long maxsize)
 {
-    int str_type;
-    int ret;
-    char free_out;
+    int str_type, rv, nchar;
     int outform, outlen = 0;
     ASN1_STRING *dest;
     unsigned char *p;
-    int nchar;
-    char strbuf[32];
+    char free_out, strbuf[32];
     int (*cpyfunc) (unsigned long, void *) = NULL;
+
     if (len == -1)
         len = strlen((const char *)in);
     if (!mask)
@@ -82,8 +80,8 @@ int ASN1_mbstring_ncopy(ASN1_STRING **out, const unsigned char *in, int len,
     case MBSTRING_UTF8:
         nchar = 0;
         /* This counts the characters and does utf8 syntax checking */
-        ret = traverse_string(in, len, MBSTRING_UTF8, in_utf8, &nchar);
-        if (ret < 0) {
+        rv = traverse_string(in, len, MBSTRING_UTF8, in_utf8, &nchar);
+        if (rv < 0) {
             ASN1err(ASN1_F_ASN1_MBSTRING_NCOPY, ASN1_R_INVALID_UTF8STRING);
             return -1;
         }
