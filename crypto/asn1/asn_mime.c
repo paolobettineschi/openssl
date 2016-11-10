@@ -152,9 +152,8 @@ static ASN1_VALUE *b64_read_asn1(BIO *bio, const ASN1_ITEM *it)
 static int asn1_write_micalg(BIO *out, STACK_OF(X509_ALGOR) *mdalgs)
 {
     const EVP_MD *md;
-    int i, have_unknown = 0, write_comma, ret = 0, md_nid;
-    have_unknown = 0;
-    write_comma = 0;
+    int i, have_unknown = 0, write_comma = 0, ret = 0, md_nid;
+
     for (i = 0; i < sk_X509_ALGOR_num(mdalgs); i++) {
         if (write_comma)
             BIO_write(out, ",", 1);
@@ -162,9 +161,9 @@ static int asn1_write_micalg(BIO *out, STACK_OF(X509_ALGOR) *mdalgs)
         md_nid = OBJ_obj2nid(sk_X509_ALGOR_value(mdalgs, i)->algorithm);
         md = EVP_get_digestbynid(md_nid);
         if (md && md->md_ctrl) {
-            int rv;
             char *micstr;
-            rv = md->md_ctrl(NULL, EVP_MD_CTRL_MICALG, 0, &micstr);
+            int rv = md->md_ctrl(NULL, EVP_MD_CTRL_MICALG, 0, &micstr);
+
             if (rv > 0) {
                 BIO_puts(out, micstr);
                 OPENSSL_free(micstr);
